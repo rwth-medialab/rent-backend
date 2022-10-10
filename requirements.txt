@@ -4,3 +4,4 @@ djangorestframework>=3.13.1,<4
 django-rest-knox>=4.2.0, <5
 Markdown>=3.3.7
 django-filter>=22.1
+Pillow>=9.2,<10
