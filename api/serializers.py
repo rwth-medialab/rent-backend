@@ -2,7 +2,7 @@ from dataclasses import fields
 from django.contrib.auth.models import User, Group
 from rest_framework import serializers
 import logging
-from base.models import RentalObject
+from base.models import Category, RentalObject, RentalObjectType
 
 logger = logging.getLogger(name='django')
 
@@ -27,6 +27,10 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
     #    logger.info(validated_data)
     #    return super().update(instance, validated_data)
 
+class KnowLoginUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['username','email','groups', 'is_staff', 'is_superuser', 'user_permissions']
 
 
 class GroupSerializer(serializers.HyperlinkedModelSerializer):
@@ -38,3 +42,15 @@ class RentalObjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = RentalObject
         fields = '__all__'
+
+class RentalObjectTypeSerializer(serializers.ModelSerializer):
+    rentalobjects = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    class Meta:
+        model = RentalObjectType
+        fields = '__all__'
+
+class CategorySerializer(serializers.ModelSerializer):
+    rentalobjecttypes = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    class Meta:
+        model = Category
+        fields = ('name', 'description', 'id', 'rentalobjecttypes')
