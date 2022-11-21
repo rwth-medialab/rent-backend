@@ -32,6 +32,9 @@ class Profile(models.Model):
     newsletter = models.BooleanField(
         verbose_name='newsletter signup', default=False)
 
+    def __str__(self) -> str:
+        return self.user.username
+
 
 class Category(models.Model):
     """
@@ -43,6 +46,9 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+class Tag(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField()
 
 class RentalObjectType(models.Model):
     """
@@ -62,6 +68,7 @@ class RentalObjectType(models.Model):
     visible = models.BooleanField(default=False)
     image = models.ImageField()
     prefix_identifier = models.CharField(max_length=20, default="LZ")
+    tags = models.ManyToManyField(Tag)
 
     def __str__(self) -> str:
         return self.name
@@ -78,14 +85,20 @@ class PublicInfoObjectType(models.Model):
 
 
 class RentalObject(models.Model):
+    class Meta:
+        constraints= [
+            models.UniqueConstraint(name='unique_identifier', fields=['type', 'internal_identifier'])
+        ]
     type = models.ForeignKey(RentalObjectType, on_delete=models.CASCADE, related_name='rentalobjects')
     # if the object also got a external identifier e.g. a department uses its own identifiers but the objects also got a inventory number of the company
     inventory_number = models.CharField(max_length=100, null=True, blank=True)
     # maybe broken so it shouldnt be rentable
     rentable = models.BooleanField(default=True)
+    # together with prefix_identifier from type class the short internal identifier e.g. LZ1
+    internal_identifier = models.IntegerField()
 
     def __str__(self) -> str:
-        return self.type.name + " " + str(self.type.prefix_identifier) + str(self.pk)
+        return self.type.name + " " + str(self.type.prefix_identifier) + str(self.internal_identifier)
 
 
 class InternalInfoObjectType(models.Model):
@@ -94,9 +107,21 @@ class InternalInfoObjectType(models.Model):
     type = models.CharField(max_length=20, verbose_name='Information type')
     content = models.TextField()
 
+# TODO add reservation model with RentalObjecttype and count
+class Reservation(models.Model):
+    reserver = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='reserver')
+    reserved_at = models.DateTimeField(auto_now_add=True)
+    reserved_from = models.DateField()
+    reserved_until = models.DateField()
+    objecttype = models.ForeignKey(RentalObjectType, on_delete=models.CASCADE)
+    operation_number = models.BigIntegerField()
+    count = models.PositiveSmallIntegerField()
 
-class RentalOperation(models.Model):
-    object = models.ForeignKey(RentalObject, on_delete=models.CASCADE)
+    def __str__(self) -> str:
+        return 'reservation: ' + str(self.operation_number)
+
+class Rental(models.Model):
+    rentedobjects = models.ForeignKey(RentalObject, on_delete=models.CASCADE)
     renter = models.ForeignKey(
         Profile, on_delete=models.CASCADE, related_name='renter')
     lender = models.ForeignKey(User, blank=True, null=True,
@@ -105,15 +130,12 @@ class RentalOperation(models.Model):
                                          related_name='return_processor', verbose_name='person who processes the return')
     rejected = models.BooleanField()
     operation_number = models.BigIntegerField()
-    reserved_at = models.DateTimeField(auto_now_add=True)
-    reserved_from = models.DateTimeField()
-    reserved_until = models.DateTimeField()
-    picked_up_at = models.DateTimeField(null=True, default=None)
     handed_out_at = models.DateTimeField(null=True, default=None)
-    received_back_at = models.DateTimeField(null=True, default=None)
+    received_back_at = models.DateTimeField(null=True, default=None, blank=True)
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
 
-# TODO add reservation model with RentalObjecttype and count
-
+    def __str__(self) -> str:
+        return 'Rental: ' + str(self.operation_number)
 
 class OnPremiseTimeSlot(models.Model):
     day = models.SmallIntegerField()
