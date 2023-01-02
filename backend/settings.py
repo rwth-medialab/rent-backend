@@ -56,7 +56,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'knox',
     'base',
-    'corsheaders'
+    'corsheaders',
+    # cleans /media on deletion of database related files
+    'django_cleanup.apps.CleanupConfig',
 ]
 
 MIDDLEWARE = [
