@@ -22,12 +22,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure--b!nu@qg+l+=5mec_-i2=_4*y8gugl215q*tgg#_b3b6!av8g('
+SECRET_KEY = str(os.environ.get('DJANGO_SECRET_KEY'))
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['unraidip.anonymeanonymiker.de', 'backend.anonymeanonymiker.de']
+ALLOWED_HOSTS = list(map(lambda x: x.replace('https://','').replace('http://','') ,str(os.environ.get('API_HOST')).split(',')))
 
 LOGGING = {
     'version': 1,
@@ -113,7 +113,8 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.' + str(os.environ.get('DB_TYPE')),
+        # since constraints are used, postgres is mandatory
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('POSTGRES_NAME'),
         'USER': os.environ.get('POSTGRES_USER'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
@@ -166,12 +167,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://anonymeanonymiker.de:3000",
-    "https://ausleihe.anonymeanonymiker.de"
-]
+CORS_ALLOWED_ORIGINS = str(os.environ.get('FRONTEND_HOST')).split(',')
 
-CSRF_TRUSTED_ORIGINS = ['https://backend.anonymeanonymiker.de']
+CSRF_TRUSTED_ORIGINS = str(os.environ.get('API_HOST')).split(',')
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 #CORS_ALLOW_ALL_ORIGINS = True
