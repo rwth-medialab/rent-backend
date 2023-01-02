@@ -2,9 +2,9 @@ from dataclasses import fields
 from django.contrib.auth.models import User, Group
 from rest_framework import serializers
 import logging
-from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental
+from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, ObjectTypeInfo
 
-logger = logging.getLogger(name='django')
+logger = logging.getLogger(name="django")
 
 
 class PrivateField(serializers.ReadOnlyField):
@@ -58,24 +58,20 @@ class RentalObjectSerializer(serializers.ModelSerializer):
 
 
 class RentalObjectTypeSerializer(serializers.ModelSerializer):
-    rentalobjects = serializers.PrimaryKeyRelatedField(
-        many=True, read_only=True)
-
     class Meta:
         model = RentalObjectType
         fields = '__all__'
 
 
 class CategorySerializer(serializers.ModelSerializer):
-    rentalobjecttypes = serializers.PrimaryKeyRelatedField(
-        many=True, read_only=True)
 
     class Meta:
         model = Category
-        fields = ('name', 'description', 'id', 'rentalobjecttypes')
+        fields = ('name', 'description', 'id')
 
 
-class ReservationSerializer(serializers.ModelSerializer):    
+class ReservationSerializer(serializers.ModelSerializer):
+    #TODO maybe switch to slugfield    
     reserverusername = serializers.SerializerMethodField(
         'get_reserverusername')    
     reservername = serializers.SerializerMethodField(
@@ -98,4 +94,14 @@ class ReservationSerializer(serializers.ModelSerializer):
 class RentalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Rental
+        fields = '__all__'
+
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = '__all__'
+
+class ObjectTypeInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ObjectTypeInfo
         fields = '__all__'

@@ -14,19 +14,24 @@ class Priority(models.Model):
     description = models.CharField(
         max_length=255, verbose_name='description of the priority class', null=True)
 
+    def __str__(self) -> str:
+        return self.name + ": " + str(self.prio)
+
 
 class Profile(models.Model):
     """
     extension of User model for addtitional information
     """
     class Meta:
-        permissions=[
-            ("inventory_editing", "able to edit and create the inventory and got nearly full access"),
-            ("general_access","got general Access to everything, but no editing rights"),
+        permissions = [
+            ("inventory_editing",
+             "able to edit and create the inventory and got nearly full access"),
+            ("general_access", "got general Access to everything, but no editing rights"),
             ("lending_access", "is able to lend stuff")
         ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    prio = models.ForeignKey(Priority, on_delete=models.CASCADE)
+    prio = models.ForeignKey(Priority, on_delete=models.CASCADE, default=Priority.objects.get_or_create(
+        prio=99, name='Default', description='default class')[0].id)
     authorized = models.BooleanField(
         verbose_name='authorized to rent objects', default=False)
     newsletter = models.BooleanField(
@@ -41,14 +46,19 @@ class Category(models.Model):
     To categorize each RentalObjectType
     """
     name = models.CharField(max_length=100)
-    description = models.TextField()
+    description = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return self.name
 
+
 class Tag(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
+
+    def __str__(self) -> str:
+        return self.name
+
 
 class RentalObjectType(models.Model):
     """
@@ -62,34 +72,41 @@ class RentalObjectType(models.Model):
             )
         ]
     name = models.CharField(max_length=100)
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='rentalobjecttypes')
+    category = models.ForeignKey(
+        Category, on_delete=models.CASCADE, related_name='rentalobjecttypes')
+    shortdescription = models.TextField(default='')
     description = models.TextField(default='')
+    manufacturer = models.CharField(max_length=100, default='')
     # hide objects from rentalpage
     visible = models.BooleanField(default=False)
-    image = models.ImageField()
+    image = models.ImageField(default='nopicture.png')
     prefix_identifier = models.CharField(max_length=20, default="LZ")
-    tags = models.ManyToManyField(Tag)
+    tags = models.ManyToManyField(Tag, blank=True)
 
     def __str__(self) -> str:
         return self.name
 
 
-class PublicInfoObjectType(models.Model):
+class ObjectTypeInfo(models.Model):
     """
     to show public information about an objectType
     """
     object_type = models.ForeignKey(RentalObjectType, on_delete=models.CASCADE)
     # infotype e.g. Warning danger (everything that works with material)
     type = models.CharField(max_length=20, verbose_name='material type')
+    public = models.BooleanField()
+    order = models.IntegerField()
     content = models.TextField()
 
 
 class RentalObject(models.Model):
     class Meta:
-        constraints= [
-            models.UniqueConstraint(name='unique_identifier', fields=['type', 'internal_identifier'])
+        constraints = [
+            models.UniqueConstraint(name='unique_identifier', fields=[
+                                    'type', 'internal_identifier'])
         ]
-    type = models.ForeignKey(RentalObjectType, on_delete=models.CASCADE, related_name='rentalobjects')
+    type = models.ForeignKey(
+        RentalObjectType, on_delete=models.CASCADE, related_name='rentalobjects')
     # if the object also got a external identifier e.g. a department uses its own identifiers but the objects also got a inventory number of the company
     inventory_number = models.CharField(max_length=100, null=True, blank=True)
     # maybe broken so it shouldnt be rentable
@@ -101,15 +118,9 @@ class RentalObject(models.Model):
         return self.type.name + " " + str(self.type.prefix_identifier) + str(self.internal_identifier)
 
 
-class InternalInfoObjectType(models.Model):
-    object_type = models.ForeignKey(RentalObjectType, on_delete=models.CASCADE)
-    # infotype e.g. Warning danger (everything that works with bootstrap)
-    type = models.CharField(max_length=20, verbose_name='Information type')
-    content = models.TextField()
-
-# TODO add reservation model with RentalObjecttype and count
 class Reservation(models.Model):
-    reserver = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='reserver')
+    reserver = models.ForeignKey(
+        Profile, on_delete=models.CASCADE, related_name='reserver')
     reserved_at = models.DateTimeField(auto_now_add=True)
     reserved_from = models.DateField()
     reserved_until = models.DateField()
@@ -120,6 +131,7 @@ class Reservation(models.Model):
     def __str__(self) -> str:
         return 'reservation: ' + str(self.operation_number)
 
+
 class Rental(models.Model):
     rentedobjects = models.ForeignKey(RentalObject, on_delete=models.CASCADE)
     renter = models.ForeignKey(
@@ -128,14 +140,16 @@ class Rental(models.Model):
                                default=None, on_delete=models.CASCADE, related_name='lender')
     return_processor = models.ForeignKey(User, blank=True, null=True, default=None, on_delete=models.CASCADE,
                                          related_name='return_processor', verbose_name='person who processes the return')
-    rejected = models.BooleanField()
+    canceled = models.BooleanField()
     operation_number = models.BigIntegerField()
     handed_out_at = models.DateTimeField(null=True, default=None)
-    received_back_at = models.DateTimeField(null=True, default=None, blank=True)
+    received_back_at = models.DateTimeField(
+        null=True, default=None, blank=True)
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
 
     def __str__(self) -> str:
         return 'Rental: ' + str(self.operation_number)
+
 
 class OnPremiseTimeSlot(models.Model):
     day = models.SmallIntegerField()
@@ -172,6 +186,13 @@ class Settings(models.Model):
     """
     for general dynamic Settings like general lenting day and rocketchat url and email setup
     """
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                name='unique_settings',
+                fields=['type']
+            )
+        ]
     type = models.CharField(max_length=100)
     value = models.CharField(max_length=100)
 
