@@ -173,6 +173,9 @@ class OnPremiseBooking(models.Model):
 
 
 class Notification(models.Model):
+    """
+    for planned notificaitons
+    """
     type = models.CharField(max_length=100, default='email')
     receiver = models.CharField(max_length=255)
     subject = models.CharField(max_length=255)
@@ -197,9 +200,27 @@ class Settings(models.Model):
     value = models.CharField(max_length=100)
 
 
+class Text(models.Model):
+    name = models.CharField(max_length=100)
+    content = models.TextField(default="", null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                name='Unique_text_slug',
+                fields=['name']
+            )
+        ]
+        verbose_name = ("Text")
+        verbose_name_plural = ("texts")
+
+    def __str__(self):
+        return self.name
+
+
 class Suggestion(models.Model):
     """
-    for suggestions which obejcts should be rented together
+    for suggestions which objects should be rented together
     """
     suggestion = models.ForeignKey(
         RentalObjectType, on_delete=models.CASCADE, related_name='suggestion')
