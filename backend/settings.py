@@ -27,7 +27,8 @@ SECRET_KEY = str(os.environ.get('DJANGO_SECRET_KEY'))
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = list(map(lambda x: x.replace('https://','').replace('http://','') ,str(os.environ.get('API_HOST')).split(',')))
+ALLOWED_HOSTS = list(map(lambda x: x.replace(
+    'https://', '').replace('http://', ''), str(os.environ.get('API_HOST')).split(',')))
 
 LOGGING = {
     'version': 1,
@@ -75,16 +76,16 @@ MIDDLEWARE = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'knox.auth.TokenAuthentication',
-        ]
+    ]
 }
 
 REST_KNOX = {
-  'SECURE_HASH_ALGORITHM': 'cryptography.hazmat.primitives.hashes.SHA512',
-  'AUTH_TOKEN_CHARACTER_LENGTH': 128,
-  'TOKEN_TTL': timedelta(hours=24),
-  'USER_SERIALIZER': 'knox.serializers.UserSerializer',
-  'TOKEN_LIMIT_PER_USER': None,
-  'AUTO_REFRESH': True,
+    'SECURE_HASH_ALGORITHM': 'cryptography.hazmat.primitives.hashes.SHA512',
+    'AUTH_TOKEN_CHARACTER_LENGTH': 128,
+    'TOKEN_TTL': timedelta(hours=24),
+    'USER_SERIALIZER': 'knox.serializers.UserSerializer',
+    'TOKEN_LIMIT_PER_USER': None,
+    'AUTO_REFRESH': True,
 }
 
 ROOT_URLCONF = 'backend.urls'
@@ -168,8 +169,21 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 CORS_ALLOWED_ORIGINS = str(os.environ.get('FRONTEND_HOST')).split(',')
+FRONTEND_HOST =  str(os.environ.get('FRONTEND_HOST')) if str(os.environ.get('FRONTEND_HOST')).endswith("/") else str(os.environ.get('FRONTEND_HOST'))+"/"
 
 CSRF_TRUSTED_ORIGINS = str(os.environ.get('API_HOST')).split(',')
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+EMAIL_VALIDATION_HASH_SALT=str(os.environ.get('EMAIL_VALIDATION_HASH_SALT'))
+
+# EMAIL
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST = ''
+EMAIL_PORT = ''
+EMAIL_HOST_USER = ''
+EMAIL_PASSWORD = ''
+EMAIL_USE_TLS = False
+EMAIL_USE_SSL = False
+DEFAULT_FROM_EMAIL = 'noreply@anonymeanonymiker.de'
+
 
 #CORS_ALLOW_ALL_ORIGINS = True
