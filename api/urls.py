@@ -12,6 +12,7 @@ router.register(r'rentalobjecttypes', views.RentalobjectTypeViewSet)
 router.register(r'categories', views.CategoryViewSet)
 router.register(r'reservations', views.ReservationViewSet)
 router.register(r'tags', views.TagViewSet)
+router.register(r'texts', views.TextViewSet)
 
 urlpatterns = [
     path(r'auth/login/', LoginView.as_view(), name='knox_login'),

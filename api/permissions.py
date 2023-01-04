@@ -4,9 +4,9 @@ from django.http import HttpRequest
 class UserPermission(permissions.BasePermission):
     def has_permission(self, request:HttpRequest, view):
         if view.action == 'list':
-            return request.user.is_authenticated and request.user.is_admin
+            return request.user.is_authenticated and request.user.is_superuser
         elif view.action == 'create':
-            return request.user.is_authenticated and request.user.is_admin
+            return True
         elif view.action in ['retrieve', 'update', 'partial_update', 'destroy']:
             return True
         else:
@@ -18,18 +18,18 @@ class UserPermission(permissions.BasePermission):
             return False
 
         if view.action == 'retrieve':
-            return obj == request.user or request.user.is_admin
+            return obj == request.user or request.user.is_superuser
         elif view.action in ['destroy', 'update', 'partial_update', 'list']:
-            return request.user.is_admin
+            return request.user.is_superuser
         else:
             return False
 
 class GroupPermission(permissions.BasePermission):
     def has_permission(self, request:HttpRequest, view):
         if view.action == 'list':
-            return request.user.is_authenticated and request.user.is_admin
+            return request.user.is_authenticated and request.user.is_superuser
         elif view.action == 'create':
-            return request.user.is_authenticated and request.user.is_admin
+            return request.user.is_authenticated and request.user.is_superuser
         elif view.action in ['retrieve', 'update', 'partial_update', 'destroy']:
             return True
         else:
@@ -41,8 +41,8 @@ class GroupPermission(permissions.BasePermission):
             return False
 
         if view.action == 'retrieve':
-            return request.user.is_admin
+            return request.user.is_superuser
         elif view.action in ['destroy', 'update', 'partial_update', 'list']:
-            return request.user.is_admin
+            return request.user.is_superuser
         else:
             return False
