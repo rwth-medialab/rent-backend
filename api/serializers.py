@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User, Group
 from rest_framework import serializers
 from rest_framework.exceptions import ParseError
+from django.db import transaction
 import logging
 from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, ObjectTypeInfo, Text, Profile
 
@@ -27,23 +28,20 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
             raise serializers.ValidationError("Email bereits in Benutzung")
         return email
 
-    def validate_empty_values(self, data):
-        return super().validate_empty_values(data)
-
+    @transaction.atomic
     def create(self, validated_data):
         logger.info("adsasdasd")
         validated_data['is_active'] = False
         if 'groups' in validated_data:
             del validated_data['groups']
+        profile_data = validated_data.pop('profile')
         user = User.objects.create_user(**validated_data)
-        try:
-            profile_data = validated_data.pop('profile')
-        except: 
-            Profile.objects.create(user=user)
-        else:
-            profile_serializer = ProfileSerializer(data=profile_data)
-            profile_serializer.is_valid(raise_exception=True)
-            profile_serializer.create(user=user, **profile_data)
+        profile_data['user'] = user.id
+        profile_serializer = ProfileSerializer(data=profile_data)
+        profile_serializer.is_valid(raise_exception=True)
+        profile_serializer.save()
+        logger.info(profile_data)
+        #Profile.objects.create(**profile_serializer.data)
         return user
 
 

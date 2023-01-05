@@ -29,7 +29,7 @@ class Profile(models.Model):
             ("general_access", "got general Access to everything, but no editing rights"),
             ("lending_access", "is able to lend stuff")
         ]
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, blank=True)
     # null as Prio means not authorized to lent. On authorization validation a corresponding Prio field must be set
     prio = models.ForeignKey(
         Priority, on_delete=models.CASCADE, null=True, blank=True)

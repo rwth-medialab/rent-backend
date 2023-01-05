@@ -88,7 +88,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """
-        use default implementation, but remove password from returned data. 
+        use default implementation, but remove password from returned data and send email to user. 
         """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
