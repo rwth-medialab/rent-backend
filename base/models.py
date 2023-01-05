@@ -20,7 +20,7 @@ class Priority(models.Model):
 
 class Profile(models.Model):
     """
-    extension of User model for addtitional information
+    extension of User model for addtitional information. since we check those permissions through here we create them here. (Automatically created through the meta tag)
     """
     class Meta:
         permissions = [
@@ -30,10 +30,9 @@ class Profile(models.Model):
             ("lending_access", "is able to lend stuff")
         ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    prio = models.ForeignKey(Priority, on_delete=models.CASCADE, default=Priority.objects.get_or_create(
-        prio=99, name='Default', description='default class')[0].id)
-    authorized = models.BooleanField(
-        verbose_name='authorized to rent objects', default=False)
+    # null as Prio means not authorized to lent. On authorization validation a corresponding Prio field must be set
+    prio = models.ForeignKey(
+        Priority, on_delete=models.CASCADE, null=True, blank=True)
     newsletter = models.BooleanField(
         verbose_name='newsletter signup', default=False)
 
