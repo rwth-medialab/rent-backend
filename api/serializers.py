@@ -3,6 +3,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ParseError
 from django.db import transaction
 import logging
+import re
 from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, ObjectTypeInfo, Text, Profile
 
 logger = logging.getLogger(name="django")
@@ -24,13 +25,23 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
                   'groups', 'id', 'first_name', 'last_name', 'profile']
 
     def validate_email(self, email):
+        """
+        overwrite the email validation to prevent multiuse of emails.
+        """
+        #TODO regular expression to db raw string is the same as in js 
+        regex = re.compile('\\S+@([a-zA-Z0-9]+\\.)?rwth-aachen\\.de')
+        result = regex.fullmatch(email)
+        if not (result and result.group(0)==email): 
+            raise serializers.ValidationError("Email ist im falsche Format")
         if User.objects.all().filter(email=email).count()>0:
             raise serializers.ValidationError("Email bereits in Benutzung")
         return email
 
     @transaction.atomic
     def create(self, validated_data):
-        logger.info("adsasdasd")
+        """
+        creates the user object in db and disables the login
+        """
         validated_data['is_active'] = False
         if 'groups' in validated_data:
             del validated_data['groups']
