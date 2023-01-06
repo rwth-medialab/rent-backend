@@ -2,7 +2,7 @@ from locale import DAY_1
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
-from datetime import date
+from datetime import datetime
 from django.utils import timezone
 
 
@@ -116,6 +116,14 @@ class RentalObject(models.Model):
     def __str__(self) -> str:
         return self.type.name + " " + str(self.type.prefix_identifier) + str(self.internal_identifier)
 
+class RentalObjectstatus(models.Model):
+    """
+    A Status to prevent a Rentalobject to be rent. for example planned maintenance. defaults to now until infinity.
+    """
+    type = models.ForeignKey(RentalObject, verbose_name="Rentalobjecttype", on_delete=models.CASCADE)
+    reason = models.TextField(default="defekt")
+    from_date = models.DateTimeField(default=timezone.now)
+    until_date= models.DateTimeField(default=datetime.max)
 
 class Reservation(models.Model):
     reserver = models.ForeignKey(
