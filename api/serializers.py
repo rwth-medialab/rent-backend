@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User, Group, Permission
 from rest_framework import serializers
 from rest_framework.exceptions import ParseError
 from django.db import transaction
@@ -26,7 +26,7 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
 
     def validate_email(self, email):
         """
-        overwrite the email validation to prevent multiuse of emails.
+        overwrite the email validation to prevent multiuse of emails. Validate Email corresponding to a specific regex
         """
         #TODO regular expression to db raw string is the same as in js 
         regex = re.compile('\\S+@([a-zA-Z0-9]+\\.)?rwth-aachen\\.de')
@@ -40,7 +40,7 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         """
-        creates the user object in db and disables the login
+        creates the user object in db and disables the login. also creates a profile with the supllied data. profile MUST be set. 
         """
         validated_data['is_active'] = False
         if 'groups' in validated_data:
@@ -51,8 +51,6 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
         profile_serializer = ProfileSerializer(data=profile_data)
         profile_serializer.is_valid(raise_exception=True)
         profile_serializer.save()
-        logger.info(profile_data)
-        #Profile.objects.create(**profile_serializer.data)
         return user
 
 
