@@ -116,7 +116,7 @@ class RentalObject(models.Model):
     def __str__(self) -> str:
         return self.type.name + " " + str(self.type.prefix_identifier) + str(self.internal_identifier)
 
-class RentalObjectstatus(models.Model):
+class RentalObjectStatus(models.Model):
     """
     A Status to prevent a Rentalobject to be rent. for example planned maintenance. defaults to now until infinity.
     """
