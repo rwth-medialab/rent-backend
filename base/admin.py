@@ -1,18 +1,19 @@
 from django.contrib import admin
 from django.contrib.auth.models import Permission
 
-from .models import RentalObject, RentalObjectType, Category,Profile, Priority, ObjectTypeInfo, Reservation, Rental, Tag, Text
+from . import models
 
 
 # Register your models here.
-admin.site.register(RentalObject)
-admin.site.register(RentalObjectType)
-admin.site.register(Category)
-admin.site.register(Priority)
-admin.site.register(ObjectTypeInfo)
-admin.site.register(Profile)
+admin.site.register(models.RentalObject)
+admin.site.register(models.RentalObjectType)
+admin.site.register(models.Category)
+admin.site.register(models.Priority)
+admin.site.register(models.ObjectTypeInfo)
+admin.site.register(models.Profile)
 admin.site.register(Permission)
-admin.site.register(Reservation)
-admin.site.register(Rental)
-admin.site.register(Tag)
-admin.site.register(Text)
+admin.site.register(models.Reservation)
+admin.site.register(models.Rental)
+admin.site.register(models.Tag)
+admin.site.register(models.Text)
+admin.site.register(models.RentalObjectStatus)

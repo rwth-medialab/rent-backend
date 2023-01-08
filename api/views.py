@@ -1,4 +1,6 @@
 import hashlib
+from datetime import datetime, timedelta
+from datetimerange import DateTimeRange
 
 from django.contrib.auth import login
 from django.contrib.auth.models import User, Group
@@ -7,23 +9,26 @@ from django.core.mail import send_mail
 from django.template import Context, Template
 from django.template.loader import get_template
 from django.forms.models import model_to_dict
+from django.core.exceptions import FieldError
+from django.db.models import Max
+from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.request import Request
 from rest_framework import viewsets
 from rest_framework import permissions
-from knox.auth import TokenAuthentication
 from rest_framework.authtoken.serializers import AuthTokenSerializer
-from knox.views import LoginView as KnoxLoginView
-
-# new aproach
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, action, authentication_classes, permission_classes
+
+from knox.views import LoginView as KnoxLoginView
+from knox.auth import TokenAuthentication
 
 from .serializers import ObjectTypeInfoSerializer, CategorySerializer, UserSerializer, RentalObjectSerializer, UserCreationSerializer, GroupSerializer, KnowLoginUserSerializer, RentalObjectTypeSerializer, ReservationSerializer, RentalSerializer, TagSerializer, TextSerializer
 from .permissions import UserPermission, GroupPermission
 
 from base.models import RentalObject, RentalObjectType, Category, Reservation, Rental, Profile, Tag, ObjectTypeInfo, Text
+from base import models
 # Allow to Login with Basic auth for testing purposes
 import logging
 
@@ -31,6 +36,9 @@ logger = logging.getLogger(name="django")
 
 
 class LoginView(KnoxLoginView):
+    """
+    Loginview returns a Authtoken for the user to login
+    """
     permission_classes = [permissions.AllowAny, ]
 
     def post(self, request, format=None):
@@ -43,13 +51,14 @@ class LoginView(KnoxLoginView):
     def get_user_serializer_class(self):
         return KnowLoginUserSerializer
 
-# Api Endpoint to check if credentials are valid
-
 
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([permissions.IsAuthenticated])
 def checkCredentials(request: Request):
+    """
+    Api Endpoint to check if credentials are valid
+    """
     return (Response(status=200))
 
 
@@ -63,6 +72,9 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def email_validation(self, request: Request):
+        """
+        Endpoint to validate the register email against. validates the registered hash
+        """
         hash = request.POST['hash']
         # to be able to deactivate accounts last login is checked
         for model in User.objects.all().filter(is_active=False, last_login__isnull=True):
@@ -96,15 +108,12 @@ class UserViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         data = serializer.data
         data['password'] = ''
-        # TODO move Template to DB
-        templateString = """Hallo {{first_name}}, 
-bitte aktiviere dein Konto unter {{validation_link}} """
         templateData = model_to_dict(User.objects.get(pk=data['id']))
         templateData['frontend_host'] = settings.FRONTEND_HOST
         templateData['hash'] = hashlib.sha256(
             (str(templateData["date_joined"]) + templateData["username"] + settings.EMAIL_VALIDATION_HASH_SALT).encode("utf-8")).hexdigest()
         templateData['validation_link'] = f"{templateData['frontend_host']}validate/{templateData['hash']}"
-        template = Template(templateString)
+        template = Template(settings.DEFAULT_REGISTER_EMAIL_TEMPLATE)
         message = template.render(Context(templateData))
 
         # TODO validate if mail has been send
@@ -143,14 +152,83 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
     # TODO Allow update/partial inventory rights
     permission_classes = [permissions.AllowAny]
 
-    @action(detail=True, methods=['GET'])
-    def available(self, request: Request, pk=None):
-        logger.info("available")
-        pass
+    @action(detail=True, url_path="available", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
+    def available_object(self, request: Request, pk=None):
+        """
+        takes two arguments a start date and an end date end calculates if that object is available around that time
+        """
+        if not models.RentalObjectType.objects.all().filter(id=pk).exists():
+            raise models.RentalObjectType.DoesNotExist
+        if not 'from_date' in request.query_params:
+            raise FieldError("from_date query param is missing")
+        if not 'until_date' in request.query_params:
+            raise FieldError("until_data query param is missing")
+
+        from_date = datetime.strptime(
+            request.query_params['from_date'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone())
+        until_date = datetime.strptime(
+            request.query_params['until_date'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone())
+        logger.info(from_date)
+        delta = until_date - from_date
+        offset = settings.DEFAULT_OFFSET_BETWEEN_RENTALS
+        # get all "defect" status for this type
+        object_status = models.RentalObjectStatus.objects.all().filter(from_date__lte=until_date, until_date__gte=from_date,
+                                                                       rentable=False, rental_object__in=models.RentalObject.objects.filter(type=pk))
+        # remove all objects with an status from objects
+        objects = models.RentalObject.objects.all().filter(
+            type=pk).exclude(rentable=False).exclude(rentalobjectstatus__in=object_status)
+        # since timedelta reduces everything to days and below we can just take the days
+        # calculate timerange with most
+        # logger.info(pk)
+        # for reservation in list(models.Reservation.objects.filter(objecttype_id=pk)):
+        #     logger.info(model_to_dict(reservation))
+        #     logger.info(until_date.date())
+        reservations = models.Reservation.objects.filter(
+            objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date())
+        rentals = models.Rental.objects.filter(
+            rented_object__in=objects, handed_out_at__lte=until_date, reservation__reserved_until__gte=from_date.date())
+        
+        count = len(objects)
+
+        # give reservations + rentals them common keys for the dates
+        normalized_list=[{**model_to_dict(x), 'from_date': x.handed_out_at.date(), 'until_date':x.reservation.reserved_until} for x in rentals]
+        #normalized_list = [ for x in reservations]
+        for reservation in reservations:
+            for _ in range(reservation.count):
+                normalized_list.append({**model_to_dict(reservation), 'from_date': reservation.reserved_from, 'until_date': reservation.reserved_until})
+        ret={}
+        max_value = 0
+        for day_diff in range(delta.days+1):
+            current_date = (from_date + timedelta(days=day_diff)).date()
+            temp_value = 0
+            for item in normalized_list:
+                # we use from_date <= < until_date otherwise it would overlap on a date. add offset in days if 
+                if item['from_date'] <= current_date < item['until_date'] + offset:
+                    temp_value += 1
+            max_value = temp_value if temp_value > max_value else max_value
+            ret[str(current_date)] = count-temp_value
+        ret['available'] = count-max_value
+
+        # substract objecttype reservation count could go below zero if the type has two reservations in the requested areas
+        # Therefore we should only substract the reservations with the most reserved objects
+        #object_reservation_max_count = models.Reservation.objects.filter(objecttype=pk ,reserved_from__lte=until_date, reserved_until__gte=from_date).aggregate(Max('count'))
+        #ret['available']['count']-= object_reservation_max_count['count__max'] if object_reservation_max_count['count__max'] else 0
+        return Response(data=ret)
+
+    @action(detail=False, url_path="available", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
+    def available_objects(self, request: Request):
+        """
+        this function does the same as available_object only for querysets returns all objects available around that time
+        """
+        #TODO allow the supply of a specific set of types
+        queryset = self.get_queryset().filter(visible=True)
+        data = {}
+        for object_type in queryset:
+            data[object_type.id] = self.available_object(request=request,pk=object_type.id).data
+        
+        return Response(data)
 
     def get_queryset(self):
-        # logger.info(self.request.META)
-        # logger.info(self.request.is_secure())
         queryset = RentalObjectType.objects.all().order_by('category', 'name')
         getdict = self.request.GET
         if 'visible' in getdict and getdict['visible'] in ['true', 'True']:

@@ -1,5 +1,8 @@
 import os
 from datetime import timedelta
+from datetime import datetime
+from django.utils import timezone
+import locale
 """
 Django settings for backend project.
 
@@ -169,11 +172,13 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 CORS_ALLOWED_ORIGINS = str(os.environ.get('FRONTEND_HOST')).split(',')
-FRONTEND_HOST =  str(os.environ.get('FRONTEND_HOST')) if str(os.environ.get('FRONTEND_HOST')).endswith("/") else str(os.environ.get('FRONTEND_HOST'))+"/"
+FRONTEND_HOST = str(os.environ.get('FRONTEND_HOST')) if str(os.environ.get(
+    'FRONTEND_HOST')).endswith("/") else str(os.environ.get('FRONTEND_HOST'))+"/"
 
 CSRF_TRUSTED_ORIGINS = str(os.environ.get('API_HOST')).split(',')
+# Fix for django thinking connection is not secure and DRF providing http only links
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-EMAIL_VALIDATION_HASH_SALT=str(os.environ.get('EMAIL_VALIDATION_HASH_SALT'))
+EMAIL_VALIDATION_HASH_SALT = str(os.environ.get('EMAIL_VALIDATION_HASH_SALT'))
 
 # EMAIL
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -185,5 +190,20 @@ EMAIL_USE_TLS = False
 EMAIL_USE_SSL = False
 DEFAULT_FROM_EMAIL = 'noreply@anonymeanonymiker.de'
 
+# Email Templates(TODO move those templates to DB)
+DEFAULT_REGISTER_EMAIL_TEMPLATE = """Hallo {{first_name}}, 
+bitte aktiviere dein Konto unter {{validation_link}} """
 
-#CORS_ALLOW_ALL_ORIGINS = True
+# Settings for appointments
+DEFAULT_LENTING_DAY_OF_WEEK = locale.DAY_4
+DEFAULT_LENTING_START_HOUR = 12
+DEFAULT_LENTING_END_HOUR = 16
+
+DEFAULT_RETURNING_DAY_OF_WEEK = locale.DAY_5
+DEFAULT_RETURNING_START_HOUR = 8
+DEFAULT_RETURNING_END_HOUR = 12
+
+# TODO move to env or db and calculate another way
+diff_in_seconds = 0*int("86400")
+DEFAULT_OFFSET_BETWEEN_RENTALS = timedelta(seconds=diff_in_seconds) if DEFAULT_LENTING_DAY_OF_WEEK == DEFAULT_RETURNING_DAY_OF_WEEK else timedelta(days=abs(
+    DEFAULT_LENTING_DAY_OF_WEEK-DEFAULT_RETURNING_DAY_OF_WEEK))

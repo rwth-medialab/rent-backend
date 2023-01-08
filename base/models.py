@@ -1,4 +1,3 @@
-from locale import DAY_1
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
@@ -116,16 +115,37 @@ class RentalObject(models.Model):
     def __str__(self) -> str:
         return self.type.name + " " + str(self.type.prefix_identifier) + str(self.internal_identifier)
 
+
 class RentalObjectStatus(models.Model):
     """
     A Status to prevent a Rentalobject to be rent. for example planned maintenance. defaults to now until infinity.
     """
-    type = models.ForeignKey(RentalObject, verbose_name="Rentalobjecttype", on_delete=models.CASCADE)
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(from_date__lte=models.F('until_date')),
+                name="object_status_enforce_from_date_lte_until_date"
+            )
+        ]
+    rental_object = models.ForeignKey(
+        RentalObject, verbose_name="Rentalobject", on_delete=models.CASCADE)
     reason = models.TextField(default="defekt")
-    from_date = models.DateTimeField(default=timezone.now)
-    until_date= models.DateTimeField(default=datetime.max)
+    from_date = models.DateField(default=timezone.now)
+    until_date = models.DateField(default=datetime.max)
+    rentable = models.BooleanField(default=False)
+
+    def __str__(self) -> str:
+        return str(self.rental_object.__str__()) + " status"
+
 
 class Reservation(models.Model):
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(reserved_from__lte=models.F('reserved_until')),
+                name="reservation_reserved_from_date_lte_reserved_until"
+            )
+        ]
     reserver = models.ForeignKey(
         Profile, on_delete=models.CASCADE, related_name='reserver')
     reserved_at = models.DateTimeField(auto_now_add=True)
@@ -140,16 +160,23 @@ class Reservation(models.Model):
 
 
 class Rental(models.Model):
-    rentedobjects = models.ForeignKey(RentalObject, on_delete=models.CASCADE)
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(handed_out_at__lte=models.F('received_back_at')),
+                name="rental_handed_out_lte_received_date"
+            )
+        ]
+    rented_object = models.ForeignKey(RentalObject, on_delete=models.CASCADE)
     renter = models.ForeignKey(
         Profile, on_delete=models.CASCADE, related_name='renter')
     lender = models.ForeignKey(User, blank=True, null=True,
                                default=None, on_delete=models.CASCADE, related_name='lender')
     return_processor = models.ForeignKey(User, blank=True, null=True, default=None, on_delete=models.CASCADE,
                                          related_name='return_processor', verbose_name='person who processes the return')
-    canceled = models.BooleanField()
+    canceled = models.DateTimeField(null=True, blank=True, default=None)
     operation_number = models.BigIntegerField()
-    handed_out_at = models.DateTimeField(null=True, default=None)
+    handed_out_at = models.DateTimeField(default=timezone.now)
     received_back_at = models.DateTimeField(
         null=True, default=None, blank=True)
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
