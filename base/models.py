@@ -25,7 +25,6 @@ class Profile(models.Model):
         permissions = [
             ("inventory_editing",
              "able to edit and create the inventory and got nearly full access"),
-            ("general_access", "got general Access to everything, but no editing rights"),
             ("lending_access", "is able to lend stuff")
         ]
     user = models.OneToOneField(User, on_delete=models.CASCADE, blank=True)
