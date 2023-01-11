@@ -26,6 +26,7 @@ from knox.auth import TokenAuthentication
 
 from .serializers import ObjectTypeInfoSerializer, CategorySerializer, UserSerializer, RentalObjectSerializer, UserCreationSerializer, GroupSerializer, KnowLoginUserSerializer, RentalObjectTypeSerializer, ReservationSerializer, RentalSerializer, TagSerializer, TextSerializer
 from .permissions import UserPermission, GroupPermission
+from api import serializers
 
 from base.models import RentalObject, RentalObjectType, Category, Reservation, Rental, Profile, Tag, ObjectTypeInfo, Text
 from base import models
@@ -86,7 +87,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 # User.objects.get(pk=model.id).update(is_active=True)
                 return Response(data={'success': True, 'detail': "Die Email wurde erfolgreich validiert und man kann sich mit dem verbundenen Account einloggen."})
         logger.info(hash)
-        return Response(data={'success': False, 'detail': "Der Link wurde entweder schon benutzt oder der Link ist falsch, bitte stelle sicher dass der Link richtig eingegeben wurde"})
+        return Response(status=status.HTTP_400_BAD_REQUEST, data={'success': False, 'detail': "Der Link wurde entweder schon benutzt oder der Link ist falsch, bitte stelle sicher dass der Link richtig eingegeben wurde"})
         # {key:value for key, value in }
 
     def get_serializer_class(self):
@@ -113,7 +114,8 @@ class UserViewSet(viewsets.ModelViewSet):
         templateData['hash'] = hashlib.sha256(
             (str(templateData["date_joined"]) + templateData["username"] + settings.EMAIL_VALIDATION_HASH_SALT).encode("utf-8")).hexdigest()
         templateData['validation_link'] = f"{templateData['frontend_host']}validate/{templateData['hash']}"
-        template = Template(settings.DEFAULT_REGISTER_EMAIL_TEMPLATE)
+        template = Template(models.Text.objects.filter(
+            name='signup_mail').first().content)
         message = template.render(Context(templateData))
 
         # TODO validate if mail has been send
@@ -152,6 +154,29 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
     # TODO Allow update/partial inventory rights
     permission_classes = [permissions.AllowAny]
 
+    @action(detail=True, url_path="duration", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
+    def max_duration(self, request: Request, pk=None):
+        """
+        returns the max Duration for a user 
+        """
+        object_type = models.RentalObjectType.objects.get(id=pk)
+        user_priority = request.user.profile.prio
+        if models.MaxRentDuration.objects.filter(
+                prio=user_priority, rental_object_type=object_type).exists():
+            instance = models.MaxRentDuration.objects.get(
+                prio=user_priority, rental_object_type=object_type)
+        elif models.MaxRentDuration.objects.filter(
+                rental_object_type=object_type, prio__prio__gte=user_priority.prio).order_by('prio__prio').exists():
+            # fallback to default duration
+            instance = models.MaxRentDuration.objects.filter(
+                rental_object_type=object_type, prio__prio__gt=user_priority.prio).order_by('prio__prio').first()
+        else:
+            # fallback fallback to 1 week
+            instance = {
+                'prio': None, 'rental_object_type': object_type, 'duration': timedelta(weeks=1)}
+        serializer = serializers.MaxRentDurationSerializer(instance)
+        return Response(serializer.data)
+
     @action(detail=True, url_path="available", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
     def available_object(self, request: Request, pk=None):
         """
@@ -168,7 +193,6 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
             request.query_params['from_date'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone())
         until_date = datetime.strptime(
             request.query_params['until_date'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone())
-        logger.info(from_date)
         delta = until_date - from_date
         offset = settings.DEFAULT_OFFSET_BETWEEN_RENTALS
         # get all "defect" status for this type
@@ -187,23 +211,31 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
             objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date())
         rentals = models.Rental.objects.filter(
             rented_object__in=objects, handed_out_at__lte=until_date, reservation__reserved_until__gte=from_date.date())
-        
+
         count = len(objects)
 
         # give reservations + rentals them common keys for the dates
-        normalized_list=[{**model_to_dict(x), 'from_date': x.handed_out_at.date(), 'until_date':x.reservation.reserved_until} for x in rentals]
-        #normalized_list = [ for x in reservations]
+        normalized_list = [{**model_to_dict(x), 'from_date': x.handed_out_at.date(
+        ), 'until_date': x.reservation.reserved_until} for x in rentals]
+        # normalized_list = [ for x in reservations]
         for reservation in reservations:
             for _ in range(reservation.count):
-                normalized_list.append({**model_to_dict(reservation), 'from_date': reservation.reserved_from, 'until_date': reservation.reserved_until})
-        ret={}
+                normalized_list.append(
+                    {**model_to_dict(reservation), 'from_date': reservation.reserved_from, 'until_date': reservation.reserved_until})
+        ret = {}
         max_value = 0
         for day_diff in range(delta.days+1):
             current_date = (from_date + timedelta(days=day_diff)).date()
             temp_value = 0
-            for item in normalized_list:
-                # we use from_date <= < until_date otherwise it would overlap on a date. add offset in days if 
-                if item['from_date'] <= current_date < item['until_date'] + offset:
+            for blocked_timerange in normalized_list:
+                # calculate offset
+                until_date_with_offset = (
+                    blocked_timerange['until_date']+offset)
+                if until_date_with_offset.isoweekday() != settings.DEFAULT_LENTING_DAY_OF_WEEK:
+                    # since weekday is not a Lenting day we extend the "occupied/lended" state until the next lenting day
+                    offset += timedelta(days=7-abs(
+                        until_date_with_offset.isoweekday()-settings.DEFAULT_LENTING_DAY_OF_WEEK))
+                if blocked_timerange['from_date'] <= current_date < blocked_timerange['until_date'] + offset:
                     temp_value += 1
             max_value = temp_value if temp_value > max_value else max_value
             ret[str(current_date)] = count-temp_value
@@ -220,12 +252,13 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
         """
         this function does the same as available_object only for querysets returns all objects available around that time
         """
-        #TODO allow the supply of a specific set of types
+        # TODO allow the supply of a specific set of types
         queryset = self.get_queryset().filter(visible=True)
         data = {}
         for object_type in queryset:
-            data[object_type.id] = self.available_object(request=request,pk=object_type.id).data
-        
+            data[object_type.id] = self.available_object(
+                request=request, pk=object_type.id).data
+
         return Response(data)
 
     def get_queryset(self):
@@ -307,12 +340,38 @@ class ObjectTypeInfoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # get default queryset, now limit it...
-        queryset = ObjectTypeInfo.objects.all()
+        queryset = super().get_queryset()
         getdict = self.request.GET
         if 'public' in getdict and getdict['public'] in ['True', 'true']:
             queryset.filter(public=True)
         elif 'public' in getdict:
             queryset.filter(public=False)
         if 'object_type' in getdict:
-            queryset.filter(object_type=int(getdict['type']))
+            queryset.filter(object_type=int(getdict['object_type']))
+        return queryset
+
+
+class PriorityViewSet(viewsets.ModelViewSet):
+    queryset = models.Priority.objects.all()
+    serializer_class = serializers.MaxRentDurationSerializer
+
+
+class SettingsViewSet(viewsets.ModelViewSet):
+    queryset = models.Settings.objects.filter(public=True)
+    serializer_class = serializers.SettingsSerializer
+
+
+class RentalViewSet(viewsets.ModelViewSet):
+    queryset = models.Rental.objects.all()
+    serializer_class = serializers.RentalSerializer
+
+class MaxRentDurationViewSet(viewsets.ModelViewSet):
+    queryset = models.MaxRentDuration.objects.all()
+    serializer_class = serializers.MaxRentDurationSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        getdict  = self.request.GET
+        if 'object_type' in getdict:
+            queryset.filter(rental_object_type=getdict['object_type'])
         return queryset

@@ -123,7 +123,7 @@ DATABASES = {
         'USER': os.environ.get('POSTGRES_USER'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
         'HOST': os.environ.get('POSTGRES_HOST'),
-        'PORT': int(os.environ.get('POSTGRES_PORT')),
+        'PORT': int(os.environ.get('POSTGRES_PORT')),# type: ignore
     }
 }
 
@@ -190,20 +190,18 @@ EMAIL_USE_TLS = False
 EMAIL_USE_SSL = False
 DEFAULT_FROM_EMAIL = 'noreply@anonymeanonymiker.de'
 
-# Email Templates(TODO move those templates to DB)
-DEFAULT_REGISTER_EMAIL_TEMPLATE = """Hallo {{first_name}}, 
-bitte aktiviere dein Konto unter {{validation_link}} """
 
 # Settings for appointments
-DEFAULT_LENTING_DAY_OF_WEEK = locale.DAY_4
+DEFAULT_LENTING_DAY_OF_WEEK = 4
 DEFAULT_LENTING_START_HOUR = 12
 DEFAULT_LENTING_END_HOUR = 16
 
-DEFAULT_RETURNING_DAY_OF_WEEK = locale.DAY_5
+DEFAULT_RETURNING_DAY_OF_WEEK = 4
 DEFAULT_RETURNING_START_HOUR = 8
 DEFAULT_RETURNING_END_HOUR = 12
 
-# TODO move to env or db and calculate another way
-diff_in_seconds = 0*int("86400")
-DEFAULT_OFFSET_BETWEEN_RENTALS = timedelta(seconds=diff_in_seconds) if DEFAULT_LENTING_DAY_OF_WEEK == DEFAULT_RETURNING_DAY_OF_WEEK else timedelta(days=abs(
-    DEFAULT_LENTING_DAY_OF_WEEK-DEFAULT_RETURNING_DAY_OF_WEEK))
+# if diff exceeds a day the calculation is done somewhere else e.g. views.RentalObjectTypeViewSet.available
+diff_in_days = 0
+DEFAULT_OFFSET_BETWEEN_RENTALS = timedelta(days=diff_in_days) 
+
+EMAIL_VALIDATION_REGEX='\\S+@([a-zA-Z0-9]+\\.)?rwth-aachen\\.de'

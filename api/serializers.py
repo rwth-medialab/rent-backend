@@ -1,26 +1,56 @@
 from django.contrib.auth.models import User, Group, Permission
 from rest_framework import serializers
 from rest_framework.exceptions import ParseError
+from rest_framework.request import Request
 from django.db import transaction
 import logging
 import re
 from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, ObjectTypeInfo, Text, Profile
+from base import models
 
 logger = logging.getLogger(name="django")
-class ProfileSerializer(serializers.ModelSerializer):
+
+
+
+class RentalObjectTypeSerializer(serializers.ModelSerializer):
     class Meta:
-        model= Profile
-        fields='__all__'
+        model = RentalObjectType
+        fields = '__all__'
+
+class MaxRentDurationSerializer(serializers.ModelSerializer):
+    duration_in_seconds = serializers.SerializerMethodField('get_duration_in_seconds', required=False)
+    class Meta:
+        model = models.MaxRentDuration
+        fields = '__all__'
+
+    def get_duration_in_seconds(self, obj):
+        """
+        since parsing of the timedelta is tidious we add another field with the timedelta in seconds
+        """
+        return int(obj.duration.total_seconds())
+
+
+class PrioritySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = models.Priority
+        fields = '__all__'
+
+class ProfileSerializer(serializers.ModelSerializer):
+    prio = PrioritySerializer()
+    class Meta:
+        model = Profile
+        fields = '__all__'
+
 
 class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
     """
     Used for user registration 
     """
-    profile= ProfileSerializer(required=False)
-    #password = PrivateField()
+    profile = ProfileSerializer(required=False)
+
     class Meta:
         model = User
-        #fields = '__all__'
         fields = ['url', 'username', 'password', 'email',
                   'groups', 'id', 'first_name', 'last_name', 'profile']
 
@@ -28,12 +58,12 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
         """
         overwrite the email validation to prevent multiuse of emails. Validate Email corresponding to a specific regex
         """
-        #TODO regular expression to db raw string is the same as in js 
-        regex = re.compile('\\S+@([a-zA-Z0-9]+\\.)?rwth-aachen\\.de')
+        # TODO regular expression to db raw string is the same as in js
+        regex = re.compile(models.Settings.objects.get(type='email_validation_regex').value)
         result = regex.fullmatch(email)
-        if not (result and result.group(0)==email): 
+        if not (result and result.group(0) == email):
             raise serializers.ValidationError("Email ist im falsche Format")
-        if User.objects.all().filter(email=email).count()>0:
+        if User.objects.all().filter(email=email).count() > 0:
             raise serializers.ValidationError("Email bereits in Benutzung")
         return email
 
@@ -47,18 +77,15 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
             del validated_data['groups']
         profile_data = validated_data.pop('profile')
         user = User.objects.create_user(**validated_data)
-        profile_data['user'] = user.id
+        profile_data['user'] = user.pk
         profile_serializer = ProfileSerializer(data=profile_data)
         profile_serializer.is_valid(raise_exception=True)
         profile_serializer.save()
         return user
 
 
-
 class UserSerializer(serializers.HyperlinkedModelSerializer):
-    profile= ProfileSerializer()
-
-    #password = PrivateField()
+    profile = ProfileSerializer()
     class Meta:
         model = User
         #fields = '__all__'
@@ -71,8 +98,8 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
         Profile.objects.create(user=user, **profile_data)
         return user
 
-    def update(self, instance:User, validated_data:dict):
-        logger.info(type( instance))
+    def update(self, instance: User, validated_data: dict):
+        logger.info(type(instance))
         instance.username = validated_data.get('username', instance.username)
         instance.email = validated_data.get('email', instance.email)
         instance.save()
@@ -88,6 +115,7 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
         ProfileSerializer.update(profile, profile, profile_data)
 
         return instance
+
 
 class KnowLoginUserSerializer(serializers.ModelSerializer):
     user_permissions = serializers.SerializerMethodField(
@@ -114,13 +142,6 @@ class RentalObjectSerializer(serializers.ModelSerializer):
         model = RentalObject
         fields = '__all__'
 
-
-class RentalObjectTypeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RentalObjectType
-        fields = '__all__'
-
-
 class CategorySerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -129,33 +150,23 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ReservationSerializer(serializers.ModelSerializer):
-    # TODO maybe switch to slugfield
-    reserverusername = serializers.SerializerMethodField(
-        'get_reserverusername')
-    reservername = serializers.SerializerMethodField(
-        'get_reservername')
-    reserverlastname = serializers.SerializerMethodField(
-        'get_reserverlastname')
-
     class Meta:
         model = Reservation
-        fields = ['count', 'id', 'objecttype', 'operation_number', 'reserved_at', 'reserved_from',
-                  'reserved_until', 'reserverusername', 'reservername', 'reserverlastname']
-
-    def get_reserverusername(self, obj: Reservation):
-        # replace ids with Permission names to reduce the number of requests
-        return obj.reserver.user.username
-
-    def get_reservername(self, obj: Reservation):
-        # replace ids with Permission names to reduce the number of requests
-        return obj.reserver.user.first_name
-
-    def get_reserverlastname(self, obj: Reservation):
-        # replace ids with Permission names to reduce the number of requests
-        return obj.reserver.user.last_name
+        fields = '__all__'
 
 
 class RentalSerializer(serializers.ModelSerializer):
+    def __init__(self, *args, **kwargs):
+        """
+        do not tell the renting person the person who rented them the object
+        """ 
+        request: Request = kwargs.get('context', {}).get('request')# type: ignore
+        super(RentalSerializer, self).__init__(*args, **kwargs)
+        if not request.user.is_staff:
+            self.fields.pop('return_processor')
+            self.fields.pop('lender')
+    reservation = ReservationSerializer(required=False)
+
     class Meta:
         model = Rental
         fields = '__all__'
@@ -177,3 +188,9 @@ class TextSerializer(serializers.ModelSerializer):
     class Meta:
         model = Text
         fields = '__all__'
+
+
+class SettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Settings
+        fields = ['type', 'value', 'id']

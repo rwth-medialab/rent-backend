@@ -27,10 +27,11 @@ class Profile(models.Model):
              "able to edit and create the inventory and got nearly full access"),
             ("lending_access", "is able to lend stuff")
         ]
-    user = models.OneToOneField(User, on_delete=models.CASCADE, blank=True)
-    # null as Prio means not authorized to lent. On authorization validation a corresponding Prio field must be set
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, blank=True, related_name="profile")
+    # Since people are already somewhat authenticated through their email allow them to lend even without validation.On authorization validation a corresponding Prio field must be set
     prio = models.ForeignKey(
-        Priority, on_delete=models.CASCADE, null=True, blank=True)
+        Priority, on_delete=models.SET_NULL, null=True, blank=True)
     newsletter = models.BooleanField(
         verbose_name='newsletter signup', default=False)
 
@@ -162,7 +163,8 @@ class Rental(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=models.Q(handed_out_at__lte=models.F('received_back_at')),
+                check=models.Q(
+                    handed_out_at__lte=models.F('received_back_at')),
                 name="rental_handed_out_lte_received_date"
             )
         ]
@@ -220,7 +222,7 @@ class Notification(models.Model):
 
 class Settings(models.Model):
     """
-    for general dynamic Settings like general lenting day and rocketchat url and email setup
+    for general dynamic Settings like general lenting day and rocketchat url
     """
     class Meta:
         constraints = [
@@ -231,6 +233,10 @@ class Settings(models.Model):
         ]
     type = models.CharField(max_length=100)
     value = models.CharField(max_length=100)
+    public = models.BooleanField()
+
+    def __str__(self) -> str:
+        return self.type
 
 
 class Text(models.Model):
@@ -259,3 +265,17 @@ class Suggestion(models.Model):
         RentalObjectType, on_delete=models.CASCADE, related_name='suggestion')
     suggestion_for = models.ForeignKey(
         RentalObjectType, on_delete=models.CASCADE, related_name='suggestion_for')
+
+
+class MaxRentDuration(models.Model):
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                name='unique_prio_type',
+                fields=['prio', 'rental_object_type']
+            )
+        ]
+    prio = models.ForeignKey(Priority, on_delete=models.CASCADE)
+    rental_object_type = models.ForeignKey(
+        RentalObjectType, on_delete=models.CASCADE)
+    duration = models.DurationField()
