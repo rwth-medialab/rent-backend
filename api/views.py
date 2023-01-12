@@ -353,7 +353,7 @@ class ObjectTypeInfoViewSet(viewsets.ModelViewSet):
 
 class PriorityViewSet(viewsets.ModelViewSet):
     queryset = models.Priority.objects.all()
-    serializer_class = serializers.MaxRentDurationSerializer
+    serializer_class = serializers.PrioritySerializer
 
 
 class SettingsViewSet(viewsets.ModelViewSet):
@@ -373,5 +373,5 @@ class MaxRentDurationViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         getdict  = self.request.GET
         if 'object_type' in getdict:
-            queryset.filter(rental_object_type=getdict['object_type'])
+            queryset = queryset.filter(rental_object_type=getdict['object_type'])
         return queryset
