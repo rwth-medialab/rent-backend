@@ -7,6 +7,7 @@ import logging
 import re
 from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, ObjectTypeInfo, Text, Profile
 from base import models
+from datetime import timedelta
 
 logger = logging.getLogger(name="django")
 
@@ -18,16 +19,26 @@ class RentalObjectTypeSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class MaxRentDurationSerializer(serializers.ModelSerializer):
-    duration_in_seconds = serializers.SerializerMethodField('get_duration_in_seconds', required=False)
+    duration_in_days = serializers.SerializerMethodField('get_duration_in_days', required=False)
+
+    
     class Meta:
         model = models.MaxRentDuration
         fields = '__all__'
 
-    def get_duration_in_seconds(self, obj):
+    def get_duration_in_days(self, obj):
         """
-        since parsing of the timedelta is tidious we add another field with the timedelta in seconds
+        since parsing of the timedelta is tidious we add another field with the timedelta in days
         """
-        return int(obj.duration.total_seconds())
+        return int(obj.duration.days)
+
+    def create(self, validated_data):
+        validated_data['duration'] = timedelta(days=validated_data['duration'].total_seconds())
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data['duration'] = timedelta(days=validated_data['duration'].total_seconds())
+        return super().update(instance, validated_data)
 
 
 class PrioritySerializer(serializers.ModelSerializer):
@@ -58,7 +69,6 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
         """
         overwrite the email validation to prevent multiuse of emails. Validate Email corresponding to a specific regex
         """
-        # TODO regular expression to db raw string is the same as in js
         regex = re.compile(models.Settings.objects.get(type='email_validation_regex').value)
         result = regex.fullmatch(email)
         if not (result and result.group(0) == email):
