@@ -47,7 +47,7 @@ class BaseConfig(AppConfig):
         """
         if not models.Priority.objects.filter(prio=99).exists():
             models.Priority.objects.create(
-                prio=99, name="default", description="Default renting class, should be the one with the shortest renting durations")
+                prio=99, name="unverified", description="Default renting class, should be the one with the shortest renting durations")
 
         if not models.Text.objects.filter(name='signup_mail').exists():
             models.Text.objects.create(

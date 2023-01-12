@@ -31,7 +31,7 @@ class Profile(models.Model):
         User, on_delete=models.CASCADE, blank=True, related_name="profile")
     # Since people are already somewhat authenticated through their email allow them to lend even without validation.On authorization validation a corresponding Prio field must be set
     prio = models.ForeignKey(
-        Priority, on_delete=models.SET_NULL, null=True, blank=True)
+        Priority, on_delete=models.SET_NULL, null=True, blank=True, default=Priority.objects.get(prio=99))
     newsletter = models.BooleanField(
         verbose_name='newsletter signup', default=False)
 
