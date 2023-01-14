@@ -8,10 +8,9 @@ import logging
 import re
 from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, ObjectTypeInfo, Text, Profile
 from base import models
-from datetime import timedelta,datetime
+from datetime import timedelta, datetime
 
 logger = logging.getLogger(name="django")
-
 
 
 class RentalObjectTypeSerializer(serializers.ModelSerializer):
@@ -19,10 +18,11 @@ class RentalObjectTypeSerializer(serializers.ModelSerializer):
         model = RentalObjectType
         fields = '__all__'
 
-class MaxRentDurationSerializer(serializers.ModelSerializer):
-    duration_in_days = serializers.SerializerMethodField('get_duration_in_days', required=False)
 
-    
+class MaxRentDurationSerializer(serializers.ModelSerializer):
+    duration_in_days = serializers.SerializerMethodField(
+        'get_duration_in_days', required=False)
+
     class Meta:
         model = models.MaxRentDuration
         fields = '__all__'
@@ -34,11 +34,13 @@ class MaxRentDurationSerializer(serializers.ModelSerializer):
         return int(obj.duration.days)
 
     def create(self, validated_data):
-        validated_data['duration'] = timedelta(days=validated_data['duration'].total_seconds())
+        validated_data['duration'] = timedelta(
+            days=validated_data['duration'].total_seconds())
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        validated_data['duration'] = timedelta(days=validated_data['duration'].total_seconds())
+        validated_data['duration'] = timedelta(
+            days=validated_data['duration'].total_seconds())
         return super().update(instance, validated_data)
 
 
@@ -48,8 +50,10 @@ class PrioritySerializer(serializers.ModelSerializer):
         model = models.Priority
         fields = '__all__'
 
+
 class ProfileSerializer(serializers.ModelSerializer):
     prio = PrioritySerializer()
+
     class Meta:
         model = Profile
         fields = '__all__'
@@ -70,7 +74,8 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
         """
         overwrite the email validation to prevent multiuse of emails. Validate Email corresponding to a specific regex
         """
-        regex = re.compile(models.Settings.objects.get(type='email_validation_regex').value)
+        regex = re.compile(models.Settings.objects.get(
+            type='email_validation_regex').value)
         result = regex.fullmatch(email)
         if not (result and result.group(0) == email):
             raise serializers.ValidationError("Email ist im falsche Format")
@@ -97,6 +102,7 @@ class UserCreationSerializer(serializers.HyperlinkedModelSerializer):
 
 class UserSerializer(serializers.HyperlinkedModelSerializer):
     profile = ProfileSerializer()
+
     class Meta:
         model = User
         #fields = '__all__'
@@ -153,6 +159,7 @@ class RentalObjectSerializer(serializers.ModelSerializer):
         model = RentalObject
         fields = '__all__'
 
+
 class CategorySerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -171,27 +178,33 @@ class ReservationSerializer(serializers.ModelSerializer):
                 message="This Combination of reserver, operation_number and object_type already exists"
             ),
         ]
-    def validate(self,data):
-        logger.info(data)
-        logger.info(data['reserver'].prio)
-        if models.RentalObjectType.max_rent_duration(pk=data['objecttype'].pk,prio=data['reserver'].prio).duration + timedelta(days=7)<data['reserved_until']-data['reserved_from']:
-            raise serializers.ValidationError(detail="the rent duration exceeds max_rent_duration.")
+
+    def validate(self, data):
+        if models.RentalObjectType.max_rent_duration(pk=data['objecttype'].pk, prio=data['reserver'].prio).duration + timedelta(days=7) < data['reserved_until']-data['reserved_from']:
+            raise serializers.ValidationError(
+                detail="the rent duration exceeds max_rent_duration.")
         if data['reserved_from'].isoweekday() != int(models.Settings.objects.get(type='lenting_day').value):
-            raise serializers.ValidationError(detail="this day is not a lenting day therefore a reservation can not start here")
+            raise serializers.ValidationError(
+                detail="this day is not a lenting day therefore a reservation can not start here")
         if data['reserved_until'].isoweekday() != int(models.Settings.objects.get(type='returning_day').value):
-            raise serializers.ValidationError(detail="this day is not a returning day therefore a reservation can not end here")
-        if data['reserved_from']>= data['reserved_until']:
-            raise serializers.ValidationError(detail="reserved_from must be before reserved_until")
-        if data['count'] > models.RentalObjectType.available(pk=data['objecttype'],from_date=data['reserved_from'], until_date=data['reserved_until'])['available']:
-            raise serializers.ValidationError(detail="There are not enough objects of this type to fullfill your reservation")
+            raise serializers.ValidationError(
+                detail="this day is not a returning day therefore a reservation can not end here")
+        if data['reserved_from'] >= data['reserved_until']:
+            raise serializers.ValidationError(
+                detail="reserved_from must be before reserved_until")
+        if data['count'] > models.RentalObjectType.available(pk=data['objecttype'], from_date=data['reserved_from'], until_date=data['reserved_until'])['available']:
+            raise serializers.ValidationError(
+                detail="There are not enough objects of this type to fullfill your reservation")
         return data
+
 
 class RentalSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         """
         do not tell the renting person the person who rented them the object
-        """ 
-        request: Request = kwargs.get('context', {}).get('request')# type: ignore
+        """
+        request: Request = kwargs.get(
+            'context', {}).get('request')  # type: ignore
         super(RentalSerializer, self).__init__(*args, **kwargs)
         if not request.user.is_staff:
             self.fields.pop('return_processor')

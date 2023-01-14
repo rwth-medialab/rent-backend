@@ -92,7 +92,6 @@ class RentalObjectType(models.Model):
         return self.name
 
     def available(pk:int, from_date: datetime, until_date:datetime):
-        logger.info(isinstance(from_date, date))
         if isinstance(from_date, date):
             from_date = datetime.combine(from_date, datetime.min.time(), tzinfo= timezone.get_current_timezone())
         if isinstance(until_date, date):
@@ -138,7 +137,6 @@ class RentalObjectType(models.Model):
             max_value = temp_value if temp_value > max_value else max_value
             ret[str(current_date)] = count-temp_value
         ret['available'] = count-max_value
-        logger.info(ret)
         return ret
 
     def max_rent_duration(pk, prio:Priority):

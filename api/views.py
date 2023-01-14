@@ -160,7 +160,8 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
         returns the max Duration for a user 
         """
         user_priority = request.user.profile.prio
-        instance = models.RentalObjectType.max_rent_duration(pk=pk,prio=user_priority)
+        instance = models.RentalObjectType.max_rent_duration(
+            pk=pk, prio=user_priority)
 
         serializer = serializers.MaxRentDurationSerializer(instance)
         logger.info(serializer.data)
@@ -183,12 +184,12 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
         until_date = datetime.strptime(
             request.query_params['until_date'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone())
 
-
         # substract objecttype reservation count could go below zero if the type has two reservations in the requested areas
         # Therefore we should only substract the reservations with the most reserved objects
         #object_reservation_max_count = models.Reservation.objects.filter(objecttype=pk ,reserved_from__lte=until_date, reserved_until__gte=from_date).aggregate(Max('count'))
         #ret['available']['count']-= object_reservation_max_count['count__max'] if object_reservation_max_count['count__max'] else 0
-        ret = models.RentalObjectType.available(pk=pk, until_date=until_date, from_date=from_date)
+        ret = models.RentalObjectType.available(
+            pk=pk, until_date=until_date, from_date=from_date)
         return Response(data=ret)
 
     @action(detail=False, url_path="available", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
@@ -248,26 +249,26 @@ class ReservationViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 operation_number=getdict['operation_number'])
         return queryset
-    @action(detail=False,methods=['POST'],url_path="bulk" , permission_classes=[permissions.IsAuthenticated])
-    def bulk_create(self, request:Request):
-        logger.info(request.data)
+
+    @action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
+    def bulk_create(self, request: Request):
         data = request.data['data']
         if models.Reservation.objects.all().exists():
-            operation_number = models.Reservation.objects.aggregate(Max('operation_number'))['operation_number__max']+1
+            operation_number = models.Reservation.objects.aggregate(
+                Max('operation_number'))['operation_number__max']+1
         else:
             operation_number = 1
 
         response_data = []
         for reservation in data:
-            logger.info(reservation)
             reservation['operation_number'] = operation_number
             reservation['reserver'] = request.user.pk
             serializer = serializers.ReservationSerializer(data=reservation)
             serializer.is_valid(raise_exception=True)
             serializer.save()
             response_data.append(serializer.data)
-        logger.info(response_data)
-        return Response(data= {'data':response_data})
+        return Response(data={'data': response_data})
+
 
 class RentalViewSet(viewsets.ModelViewSet):
     queryset = Rental.objects.all()
@@ -343,7 +344,8 @@ class MaxRentDurationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        getdict  = self.request.GET
+        getdict = self.request.GET
         if 'object_type' in getdict:
-            queryset = queryset.filter(rental_object_type=getdict['object_type'])
+            queryset = queryset.filter(
+                rental_object_type=getdict['object_type'])
         return queryset
