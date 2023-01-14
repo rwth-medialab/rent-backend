@@ -3,6 +3,13 @@ from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from datetime import datetime
 from django.utils import timezone
+from django.conf import settings
+from datetime import timedelta, date
+from django.forms import model_to_dict
+import logging
+
+
+logger = logging.getLogger(name="django")
 
 
 class Priority(models.Model):
@@ -84,6 +91,74 @@ class RentalObjectType(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    def available(pk:int, from_date: datetime, until_date:datetime):
+        logger.info(isinstance(from_date, date))
+        if isinstance(from_date, date):
+            from_date = datetime.combine(from_date, datetime.min.time(), tzinfo= timezone.get_current_timezone())
+        if isinstance(until_date, date):
+            until_date = datetime.combine(until_date, datetime.min.time(),tzinfo=timezone.get_current_timezone())
+        delta = until_date - from_date
+        offset = settings.DEFAULT_OFFSET_BETWEEN_RENTALS
+        # get all "defect" status for this type
+        object_status = RentalObjectStatus.objects.all().filter(from_date__lte=until_date, until_date__gte=from_date,
+                                                                       rentable=False, rental_object__in=RentalObject.objects.filter(type=pk))
+        # remove all objects with an status from objects
+        objects = RentalObject.objects.all().filter(
+            type=pk).exclude(rentable=False).exclude(rentalobjectstatus__in=object_status)
+        reservations = Reservation.objects.filter(
+            objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date())
+        rentals = Rental.objects.filter(
+            rented_object__in=objects, handed_out_at__lte=until_date, reservation__reserved_until__gte=from_date.date())
+
+        count = len(objects)
+
+        # give reservations + rentals them common keys for the dates
+        normalized_list = [{**model_to_dict(x), 'from_date': x.handed_out_at.date(
+        ), 'until_date': x.reservation.reserved_until} for x in rentals]
+        # normalized_list = [ for x in reservations]
+        for reservation in reservations:
+            for _ in range(reservation.count):
+                normalized_list.append(
+                    {**model_to_dict(reservation), 'from_date': reservation.reserved_from, 'until_date': reservation.reserved_until})
+        ret = {}
+        max_value = 0
+        for day_diff in range(delta.days+1):
+            current_date = (from_date + timedelta(days=day_diff)).date()
+            temp_value = 0
+            for blocked_timerange in normalized_list:
+                # calculate offset
+                until_date_with_offset = (
+                    blocked_timerange['until_date']+offset)
+                if until_date_with_offset.isoweekday() != settings.DEFAULT_LENTING_DAY_OF_WEEK:
+                    # since weekday is not a Lenting day we extend the "occupied/lended" state until the next lenting day
+                    offset += timedelta(days=7-abs(
+                        until_date_with_offset.isoweekday()-settings.DEFAULT_LENTING_DAY_OF_WEEK))
+                if blocked_timerange['from_date'] <= current_date < blocked_timerange['until_date'] + offset:
+                    temp_value += 1
+            max_value = temp_value if temp_value > max_value else max_value
+            ret[str(current_date)] = count-temp_value
+        ret['available'] = count-max_value
+        logger.info(ret)
+        return ret
+
+    def max_rent_duration(pk, prio:Priority):
+        object_type = RentalObjectType.objects.get(id=pk)
+        user_priority = prio
+        if MaxRentDuration.objects.filter(
+                prio=prio, rental_object_type=object_type).exists():
+            instance = MaxRentDuration.objects.get(
+                prio=user_priority, rental_object_type=object_type)
+        elif MaxRentDuration.objects.filter(
+                rental_object_type=object_type, prio__prio__gte=user_priority.prio).order_by('prio__prio').exists():
+            # fallback to default duration
+            instance = MaxRentDuration.objects.filter(
+                rental_object_type=object_type, prio__prio__gt=user_priority.prio).order_by('prio__prio').first()
+        else:
+            # fallback fallback to 1 week
+            instance = {
+                'prio': None, 'rental_object_type': object_type, 'duration': timedelta(weeks=1)}
+
+        return instance
 
 class ObjectTypeInfo(models.Model):
     """

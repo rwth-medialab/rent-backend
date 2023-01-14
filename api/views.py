@@ -159,22 +159,11 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
         """
         returns the max Duration for a user 
         """
-        object_type = models.RentalObjectType.objects.get(id=pk)
         user_priority = request.user.profile.prio
-        if models.MaxRentDuration.objects.filter(
-                prio=user_priority, rental_object_type=object_type).exists():
-            instance = models.MaxRentDuration.objects.get(
-                prio=user_priority, rental_object_type=object_type)
-        elif models.MaxRentDuration.objects.filter(
-                rental_object_type=object_type, prio__prio__gte=user_priority.prio).order_by('prio__prio').exists():
-            # fallback to default duration
-            instance = models.MaxRentDuration.objects.filter(
-                rental_object_type=object_type, prio__prio__gt=user_priority.prio).order_by('prio__prio').first()
-        else:
-            # fallback fallback to 1 week
-            instance = {
-                'prio': None, 'rental_object_type': object_type, 'duration': timedelta(weeks=1)}
+        instance = models.RentalObjectType.max_rent_duration(pk=pk,prio=user_priority)
+
         serializer = serializers.MaxRentDurationSerializer(instance)
+        logger.info(serializer.data)
         return Response(serializer.data)
 
     @action(detail=True, url_path="available", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
@@ -193,58 +182,13 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
             request.query_params['from_date'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone())
         until_date = datetime.strptime(
             request.query_params['until_date'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone())
-        delta = until_date - from_date
-        offset = settings.DEFAULT_OFFSET_BETWEEN_RENTALS
-        # get all "defect" status for this type
-        object_status = models.RentalObjectStatus.objects.all().filter(from_date__lte=until_date, until_date__gte=from_date,
-                                                                       rentable=False, rental_object__in=models.RentalObject.objects.filter(type=pk))
-        # remove all objects with an status from objects
-        objects = models.RentalObject.objects.all().filter(
-            type=pk).exclude(rentable=False).exclude(rentalobjectstatus__in=object_status)
-        # since timedelta reduces everything to days and below we can just take the days
-        # calculate timerange with most
-        # logger.info(pk)
-        # for reservation in list(models.Reservation.objects.filter(objecttype_id=pk)):
-        #     logger.info(model_to_dict(reservation))
-        #     logger.info(until_date.date())
-        reservations = models.Reservation.objects.filter(
-            objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date())
-        rentals = models.Rental.objects.filter(
-            rented_object__in=objects, handed_out_at__lte=until_date, reservation__reserved_until__gte=from_date.date())
 
-        count = len(objects)
-
-        # give reservations + rentals them common keys for the dates
-        normalized_list = [{**model_to_dict(x), 'from_date': x.handed_out_at.date(
-        ), 'until_date': x.reservation.reserved_until} for x in rentals]
-        # normalized_list = [ for x in reservations]
-        for reservation in reservations:
-            for _ in range(reservation.count):
-                normalized_list.append(
-                    {**model_to_dict(reservation), 'from_date': reservation.reserved_from, 'until_date': reservation.reserved_until})
-        ret = {}
-        max_value = 0
-        for day_diff in range(delta.days+1):
-            current_date = (from_date + timedelta(days=day_diff)).date()
-            temp_value = 0
-            for blocked_timerange in normalized_list:
-                # calculate offset
-                until_date_with_offset = (
-                    blocked_timerange['until_date']+offset)
-                if until_date_with_offset.isoweekday() != settings.DEFAULT_LENTING_DAY_OF_WEEK:
-                    # since weekday is not a Lenting day we extend the "occupied/lended" state until the next lenting day
-                    offset += timedelta(days=7-abs(
-                        until_date_with_offset.isoweekday()-settings.DEFAULT_LENTING_DAY_OF_WEEK))
-                if blocked_timerange['from_date'] <= current_date < blocked_timerange['until_date'] + offset:
-                    temp_value += 1
-            max_value = temp_value if temp_value > max_value else max_value
-            ret[str(current_date)] = count-temp_value
-        ret['available'] = count-max_value
 
         # substract objecttype reservation count could go below zero if the type has two reservations in the requested areas
         # Therefore we should only substract the reservations with the most reserved objects
         #object_reservation_max_count = models.Reservation.objects.filter(objecttype=pk ,reserved_from__lte=until_date, reserved_until__gte=from_date).aggregate(Max('count'))
         #ret['available']['count']-= object_reservation_max_count['count__max'] if object_reservation_max_count['count__max'] else 0
+        ret = models.RentalObjectType.available(pk=pk, until_date=until_date, from_date=from_date)
         return Response(data=ret)
 
     @action(detail=False, url_path="available", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
@@ -280,6 +224,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
     """
     Limit returned objects by open, from and until get requests
     """
+
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     # TODO assign rights
@@ -303,7 +248,26 @@ class ReservationViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 operation_number=getdict['operation_number'])
         return queryset
+    @action(detail=False,methods=['POST'],url_path="bulk" , permission_classes=[permissions.IsAuthenticated])
+    def bulk_create(self, request:Request):
+        logger.info(request.data)
+        data = request.data['data']
+        if models.Reservation.objects.all().exists():
+            operation_number = models.Reservation.objects.aggregate(Max('operation_number'))['operation_number__max']+1
+        else:
+            operation_number = 1
 
+        response_data = []
+        for reservation in data:
+            logger.info(reservation)
+            reservation['operation_number'] = operation_number
+            reservation['reserver'] = request.user.pk
+            serializer = serializers.ReservationSerializer(data=reservation)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            response_data.append(serializer.data)
+        logger.info(response_data)
+        return Response(data= {'data':response_data})
 
 class RentalViewSet(viewsets.ModelViewSet):
     queryset = Rental.objects.all()
@@ -364,6 +328,14 @@ class SettingsViewSet(viewsets.ModelViewSet):
 class RentalViewSet(viewsets.ModelViewSet):
     queryset = models.Rental.objects.all()
     serializer_class = serializers.RentalSerializer
+
+    def get_queryset(self):
+        queryset = models.Rental.objects.all()
+        if self.request.user.is_staff:
+            return queryset
+        else:
+            return queryset.filter(reservation__reserver=self.request.user)
+
 
 class MaxRentDurationViewSet(viewsets.ModelViewSet):
     queryset = models.MaxRentDuration.objects.all()

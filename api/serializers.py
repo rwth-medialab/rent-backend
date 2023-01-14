@@ -2,12 +2,13 @@ from django.contrib.auth.models import User, Group, Permission
 from rest_framework import serializers
 from rest_framework.exceptions import ParseError
 from rest_framework.request import Request
+from rest_framework import validators
 from django.db import transaction
 import logging
 import re
 from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, ObjectTypeInfo, Text, Profile
 from base import models
-from datetime import timedelta
+from datetime import timedelta,datetime
 
 logger = logging.getLogger(name="django")
 
@@ -163,7 +164,27 @@ class ReservationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = '__all__'
-
+        validators = [
+            validators.UniqueTogetherValidator(
+                queryset=models.Reservation.objects.all(),
+                fields=['reserver', 'operation_number', 'objecttype'],
+                message="This Combination of reserver, operation_number and object_type already exists"
+            ),
+        ]
+    def validate(self,data):
+        logger.info(data)
+        logger.info(data['reserver'].prio)
+        if models.RentalObjectType.max_rent_duration(pk=data['objecttype'].pk,prio=data['reserver'].prio).duration + timedelta(days=7)<data['reserved_until']-data['reserved_from']:
+            raise serializers.ValidationError(detail="the rent duration exceeds max_rent_duration.")
+        if data['reserved_from'].isoweekday() != int(models.Settings.objects.get(type='lenting_day').value):
+            raise serializers.ValidationError(detail="this day is not a lenting day therefore a reservation can not start here")
+        if data['reserved_until'].isoweekday() != int(models.Settings.objects.get(type='returning_day').value):
+            raise serializers.ValidationError(detail="this day is not a returning day therefore a reservation can not end here")
+        if data['reserved_from']>= data['reserved_until']:
+            raise serializers.ValidationError(detail="reserved_from must be before reserved_until")
+        if data['count'] > models.RentalObjectType.available(pk=data['objecttype'],from_date=data['reserved_from'], until_date=data['reserved_until'])['available']:
+            raise serializers.ValidationError(detail="There are not enough objects of this type to fullfill your reservation")
+        return data
 
 class RentalSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
