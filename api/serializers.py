@@ -52,7 +52,7 @@ class PrioritySerializer(serializers.ModelSerializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
-    prio = PrioritySerializer()
+    prio = PrioritySerializer(required=False)
 
     class Meta:
         model = Profile
@@ -116,7 +116,6 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
         return user
 
     def update(self, instance: User, validated_data: dict):
-        logger.info(type(instance))
         instance.username = validated_data.get('username', instance.username)
         instance.email = validated_data.get('email', instance.email)
         instance.save()
@@ -133,15 +132,21 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
 
         return instance
 
+class AdminUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model= User
+        exclude=['password']
+
 
 class KnowLoginUserSerializer(serializers.ModelSerializer):
     user_permissions = serializers.SerializerMethodField(
         'get_user_permissions_name')
 
+    profile = ProfileSerializer(read_only=True)
     class Meta:
         model = User
         fields = ['username', 'email', 'groups',
-                  'is_staff', 'is_superuser', 'user_permissions']
+                  'is_staff', 'is_superuser', 'user_permissions', 'profile']
 
     def get_user_permissions_name(self, obj):
         # replace ids with Permission names to reduce the number of requests
@@ -167,9 +172,9 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ('name', 'description', 'id')
 
 
-class ReservationSerializer(serializers.ModelSerializer):
+class BulkReservationSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Reservation
+        model = models.Reservation
         fields = '__all__'
         validators = [
             validators.UniqueTogetherValidator(
@@ -197,6 +202,19 @@ class ReservationSerializer(serializers.ModelSerializer):
                 detail="There are not enough objects of this type to fullfill your reservation")
         return data
 
+class ReservationProfileSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    class Meta:
+        model = models.Profile
+        fields = '__all__'
+
+class ReservationSerializer(serializers.ModelSerializer):
+    reserver = ReservationProfileSerializer(read_only=True)
+    objecttype = RentalObjectTypeSerializer(read_only=True)
+    class Meta:
+        model = models.Reservation
+        fields = '__all__'
+
 
 class RentalSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
@@ -206,11 +224,22 @@ class RentalSerializer(serializers.ModelSerializer):
         request: Request = kwargs.get(
             'context', {}).get('request')  # type: ignore
         super(RentalSerializer, self).__init__(*args, **kwargs)
-        if not request.user.is_staff:
+        if request == None or not request.user.is_staff:
             self.fields.pop('return_processor')
             self.fields.pop('lender')
+    def create(self, validated_data):
+        logger.info(validated_data)
+        validated_data['reservation'] = validated_data['reservation']
+        rental = models.Rental.objects.create(**validated_data)
+        return rental
+
     reservation = ReservationSerializer(required=False)
 
+    class Meta:
+        model = Rental
+        fields = '__all__'
+
+class RentalCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Rental
         fields = '__all__'
@@ -238,3 +267,8 @@ class SettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Settings
         fields = ['type', 'value', 'id']
+
+class FilesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=models.Files
+        fields = '__all__'

@@ -181,14 +181,18 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 EMAIL_VALIDATION_HASH_SALT = str(os.environ.get('EMAIL_VALIDATION_HASH_SALT'))
 
 # EMAIL
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-EMAIL_HOST = ''
-EMAIL_PORT = ''
-EMAIL_HOST_USER = ''
-EMAIL_PASSWORD = ''
-EMAIL_USE_TLS = False
-EMAIL_USE_SSL = False
-DEFAULT_FROM_EMAIL = 'noreply@anonymeanonymiker.de'
+EMAIL_TEST=str(os.environ.get('EMAIL_TEST')).lower() == 'true'
+if EMAIL_TEST:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST = str(os.environ.get('EMAIL_HOST'))
+
+if (str(os.environ.get('EMAIL_REQUIRES_LOGIN')).lower() == 'true'):
+    EMAIL_HOST_USER = str(os.environ.get('EMAIL_HOST_USER'))
+    EMAIL_PASSWORD = str(os.environ.get('EMAIL_PASSWORD'))
+EMAIL_PORT = str(os.environ.get('EMAIL_PORT'))
+EMAIL_USE_TLS =  str(os.environ.get('EMAIL_USE_TLS')).lower() == "true"
+EMAIL_USE_SSL = str(os.environ.get('EMAIL_USE_SSL')).lower() == "true"
+DEFAULT_FROM_EMAIL = str(os.environ.get('DEFAULT_FROM_EMAIL'))
 
 
 # Settings for appointments

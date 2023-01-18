@@ -7,4 +7,4 @@ django-filter>=22.1
 Pillow>=9.2,<10
 django-cors-headers>=3.13.0, <4
 django-cleanup>=6.0.0, <7 
-DateTimeRange>=1.2.0, <2
+docxtpl>=0.16.5

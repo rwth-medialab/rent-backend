@@ -38,9 +38,9 @@ class Profile(models.Model):
         User, on_delete=models.CASCADE, blank=True, related_name="profile")
     # Since people are already somewhat authenticated through their email allow them to lend even without validation.On authorization validation a corresponding Prio field must be set
     prio = models.ForeignKey(
-        Priority, on_delete=models.SET_NULL, null=True, blank=True, default=Priority.objects.get(prio=99))
+        Priority, on_delete=models.SET_NULL, null=True, blank=True, default=Priority.objects.get(prio=99).id)
     newsletter = models.BooleanField(
-        verbose_name='newsletter signup', default=False)
+        verbose_name='newsletter signup', default=False, blank=True)
 
     def __str__(self) -> str:
         return self.user.username
@@ -91,16 +91,18 @@ class RentalObjectType(models.Model):
     def __str__(self) -> str:
         return self.name
 
-    def available(pk:int, from_date: datetime, until_date:datetime):
+    def available(pk: int, from_date: datetime, until_date: datetime):
         if isinstance(from_date, date):
-            from_date = datetime.combine(from_date, datetime.min.time(), tzinfo= timezone.get_current_timezone())
+            from_date = datetime.combine(
+                from_date, datetime.min.time(), tzinfo=timezone.get_current_timezone())
         if isinstance(until_date, date):
-            until_date = datetime.combine(until_date, datetime.min.time(),tzinfo=timezone.get_current_timezone())
+            until_date = datetime.combine(
+                until_date, datetime.min.time(), tzinfo=timezone.get_current_timezone())
         delta = until_date - from_date
         offset = settings.DEFAULT_OFFSET_BETWEEN_RENTALS
         # get all "defect" status for this type
         object_status = RentalObjectStatus.objects.all().filter(from_date__lte=until_date, until_date__gte=from_date,
-                                                                       rentable=False, rental_object__in=RentalObject.objects.filter(type=pk))
+                                                                rentable=False, rental_object__in=RentalObject.objects.filter(type=pk))
         # remove all objects with an status from objects
         objects = RentalObject.objects.all().filter(
             type=pk).exclude(rentable=False).exclude(rentalobjectstatus__in=object_status)
@@ -139,7 +141,7 @@ class RentalObjectType(models.Model):
         ret['available'] = count-max_value
         return ret
 
-    def max_rent_duration(pk, prio:Priority):
+    def max_rent_duration(pk, prio: Priority):
         object_type = RentalObjectType.objects.get(id=pk)
         user_priority = prio
         if MaxRentDuration.objects.filter(
@@ -157,6 +159,7 @@ class RentalObjectType(models.Model):
                 'prio': None, 'rental_object_type': object_type, 'duration': timedelta(weeks=1)}
 
         return instance
+
 
 class ObjectTypeInfo(models.Model):
     """
@@ -237,26 +240,24 @@ class Rental(models.Model):
         constraints = [
             models.CheckConstraint(
                 check=models.Q(
-                    handed_out_at__lte=models.F('received_back_at')),
+                    models.Q(handed_out_at__lte=models.F('received_back_at')) | models.Q(received_back_at__isnull=True)),
                 name="rental_handed_out_lte_received_date"
             )
         ]
     rented_object = models.ForeignKey(RentalObject, on_delete=models.CASCADE)
-    renter = models.ForeignKey(
-        Profile, on_delete=models.CASCADE, related_name='renter')
     lender = models.ForeignKey(User, blank=True, null=True,
                                default=None, on_delete=models.CASCADE, related_name='lender')
     return_processor = models.ForeignKey(User, blank=True, null=True, default=None, on_delete=models.CASCADE,
                                          related_name='return_processor', verbose_name='person who processes the return')
     canceled = models.DateTimeField(null=True, blank=True, default=None)
-    operation_number = models.BigIntegerField()
+    rental_number = models.BigIntegerField()
     handed_out_at = models.DateTimeField(default=timezone.now)
     received_back_at = models.DateTimeField(
         null=True, default=None, blank=True)
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
 
     def __str__(self) -> str:
-        return 'Rental: ' + str(self.operation_number)
+        return 'Rental: ' + str(self.rental_number)
 
 
 class OnPremiseTimeSlot(models.Model):
@@ -352,3 +353,11 @@ class MaxRentDuration(models.Model):
     rental_object_type = models.ForeignKey(
         RentalObjectType, on_delete=models.CASCADE)
     duration = models.DurationField()
+
+
+class Files(models.Model):
+    file = models.FileField(default="docxtemplate.docx")
+    name = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.name
