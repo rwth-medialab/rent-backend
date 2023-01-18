@@ -106,8 +106,9 @@ class RentalObjectType(models.Model):
         # remove all objects with an status from objects
         objects = RentalObject.objects.all().filter(
             type=pk).exclude(rentable=False).exclude(rentalobjectstatus__in=object_status)
+        # exclude reservations that are already related to an rental
         reservations = Reservation.objects.filter(
-            objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date())
+            objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date()).exclude(rentals__in=Rental.objects.filter(rented_object__type=pk))
         rentals = Rental.objects.filter(
             rented_object__in=objects, handed_out_at__lte=until_date, reservation__reserved_until__gte=from_date.date())
 
