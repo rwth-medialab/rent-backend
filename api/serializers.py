@@ -227,12 +227,7 @@ class RentalSerializer(serializers.ModelSerializer):
         if request == None or not request.user.is_staff:
             self.fields.pop('return_processor')
             self.fields.pop('lender')
-    def create(self, validated_data):
-        logger.info(validated_data)
-        validated_data['reservation'] = validated_data['reservation']
-        rental = models.Rental.objects.create(**validated_data)
-        return rental
-
+    rented_object = RentalObjectSerializer(required=False)
     reservation = ReservationSerializer(required=False)
 
     class Meta:
