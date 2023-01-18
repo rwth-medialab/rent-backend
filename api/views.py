@@ -204,11 +204,6 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
             request.query_params['from_date'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone())
         until_date = datetime.strptime(
             request.query_params['until_date'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone())
-
-        # substract objecttype reservation count could go below zero if the type has two reservations in the requested areas
-        # Therefore we should only substract the reservations with the most reserved objects
-        #object_reservation_max_count = models.Reservation.objects.filter(objecttype=pk ,reserved_from__lte=until_date, reserved_until__gte=from_date).aggregate(Max('count'))
-        #ret['available']['count']-= object_reservation_max_count['count__max'] if object_reservation_max_count['count__max'] else 0
         ret = models.RentalObjectType.available(
             pk=pk, until_date=until_date, from_date=from_date)
         return Response(data=ret)
