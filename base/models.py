@@ -108,9 +108,9 @@ class RentalObjectType(models.Model):
             type=pk).exclude(rentable=False).exclude(rentalobjectstatus__in=object_status)
         # exclude reservations that are already related to an rental
         reservations = Reservation.objects.filter(
-            objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date()).exclude(rentals__in=Rental.objects.filter(rented_object__type=pk))
+            objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date()).exclude(rental__in=Rental.objects.filter(rented_object__type=pk))
         rentals = Rental.objects.filter(
-            rented_object__in=objects, handed_out_at__lte=until_date, reservation__reserved_until__gte=from_date.date())
+            rented_object__in=objects, handed_out_at__lte=until_date, reserved_until__gte=from_date.date())
 
         count = len(objects)
 
@@ -256,6 +256,8 @@ class Rental(models.Model):
     received_back_at = models.DateTimeField(
         null=True, default=None, blank=True)
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
+    # we need the additional field to allow single device rental extensions
+    reserved_until = models.DateField()
 
     def __str__(self) -> str:
         return 'Rental: ' + str(self.rental_number)

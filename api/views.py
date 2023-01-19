@@ -8,7 +8,7 @@ from django.template import Context, Template
 from django.template.loader import get_template
 from django.forms.models import model_to_dict
 from django.core.exceptions import FieldError
-from django.db.models import Max, Q
+from django.db.models import Max, Q, F
 from django.utils import timezone
 from django.http import HttpResponse, FileResponse
 
@@ -107,7 +107,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """
-        use default implementation, but remove password from returned data and send email to user. 
+        use default implementation, but remove password from returned data and send email to user.
         """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -121,7 +121,7 @@ class UserViewSet(viewsets.ModelViewSet):
             (str(templateData["date_joined"]) + templateData["username"] + settings.EMAIL_VALIDATION_HASH_SALT).encode("utf-8")).hexdigest()
         templateData['validation_link'] = f"{templateData['frontend_host']}validate/{templateData['hash']}"
         template = Template(models.Text.objects.filter(
-            name='signup_mail').first().content.replace(r"%}}</p>", r"%}}").replace(r"<p>{{%",r"{{%"))
+            name='signup_mail').first().content.replace(r"%}}</p>", r"%}}").replace(r"<p>{{%", r"{{%"))
         message = template.render(Context(templateData))
 
         # TODO validate if mail has been send
@@ -163,7 +163,7 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
     @action(detail=True, url_path="duration", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
     def max_duration(self, request: Request, pk=None):
         """
-        returns the max Duration for a user 
+        returns the max Duration for a user
         """
         user_priority = request.user.profile.prio
         instance = models.RentalObjectType.max_rent_duration(
@@ -276,11 +276,18 @@ class ReservationViewSet(viewsets.ModelViewSet):
             operation_number = 1
 
         response_data = []
+        for reservation in data:
+            if reservation['count'] > models.RentalObjectType.available(reservation['objecttype'], datetime.strptime(reservation['reserved_from'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone()), datetime.strptime(reservation['reserved_until'], "%Y-%m-%d").replace(tzinfo=timezone.get_current_timezone()))['available']:
+                return Response({'data': 'not enough objects available'}, status=status.HTTP_400_BAD_REQUEST)
         template_data = {"reservations": []}
         for reservation in data:
-            logger.info(reservation)
-            # merge reservations of the same type
-            if (models.Reservation.objects.filter(reserved_from=reservation["reserved_from"], reserved_until=reservation["reserved_until"], objecttype=reservation["objecttype"], reserver=request.user.profile.pk)).count() == 0:
+            # merge reservations of the same type and not aleardy rented
+            if models.Reservation.objects.filter(
+                    reserved_from=reservation["reserved_from"],
+                    reserved_until=reservation["reserved_until"],
+                    objecttype=reservation["objecttype"],
+                    reserver=request.user.profile.pk).exclude(
+                        rental__in=Rental.objects.filter(rented_object__type=reservation['objecttype'])).count() == 0:
                 logger.info("resre")
                 reservation['operation_number'] = operation_number
                 reservation['reserver'] = request.user.profile.pk
@@ -305,13 +312,14 @@ class ReservationViewSet(viewsets.ModelViewSet):
                          "returning_end_hour": models.Settings.objects.get(type="returning_end_hour").value, }
         logger.info(template_data)
         template = Template(models.Text.objects.filter(
-            name='reservation_confirmation_mail').first().content.replace(r"%}}</p>", r"%}}").replace(r"<p>{{%",r"{{%"))
+            name='reservation_confirmation_mail').first().content.replace(r"%}}</p>", r"%}}").replace(r"<p>{{%", r"{{%"))
         message = template.render(Context(template_data))
-        send_mail(subject="Deine Reservierung", message=message, html_message=message,
-                  from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[template_data['reservations'][0]["reserver"].user.email])
+        if len(template_data['reservations']) > 0:
+            send_mail(subject="Deine Reservierung", message=message, html_message=message,
+                      from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[template_data['reservations'][0]["reserver"].user.email])
         return Response(data={'data': response_data})
 
-    @action(detail=False, methods=['POST'], url_path="download_form", permission_classes=[permissions.IsAuthenticated])
+    @ action(detail=False, methods=['POST'], url_path="download_form", permission_classes=[permissions.IsAuthenticated])
     def download_form(self, request: Request):
         """
         expecting data in [{reserver: {'user': {first_name:string, last_name:string, email:string} }, objecttype: {name:string, prefix_identifier:string}, slectedObjects: [pk:int], reserved_from: %Y-%m-%d :string, reserved_until:string }] for each type an instance
@@ -341,11 +349,14 @@ class RentalViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = models.Rental.objects.all()
         if self.request.user.is_staff:
-            return queryset
+            queryset = queryset
         else:
-            return queryset.filter(reservation__reserver=self.request.user)
+            queryset = queryset.filter(reservation__reserver=self.request.user)
+        if "open" in self.request.GET and self.request.GET["open"] in ["true", "True"]:
+            queryset = queryset.filter(received_back_at__isnull=True)
+        return queryset
 
-    @action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
+    @ action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
     def bulk_rental_creation(self, request: Request):
         """
         Takes a list of reservations and turns them into rentals
@@ -365,6 +376,7 @@ class RentalViewSet(viewsets.ModelViewSet):
                 rental['rental_number'] = rental_number
                 rental['handed_out_at'] = timezone.now()
                 rental['reservation'] = reservation['id']
+                rental['reserved_until'] = reservation['reserved_until']
                 # we need an own serializer since reservation needs to be read only on the other serializer
                 serializer = serializers.RentalCreateSerializer(data=rental)
                 serializer.is_valid(raise_exception=True)
@@ -372,11 +384,25 @@ class RentalViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 ret_data.append(serializer.data)
         template = Template(models.Text.objects.filter(
-            name='rental_confirmation_mail').first().content.replace(r"%}}</p>", r"%}}").replace(r"<p>{{%",r"{{%"))
+            name='rental_confirmation_mail').first().content.replace(r"%}}</p>", r"%}}").replace(r"<p>{{%", r"{{%"))
         message = template.render(Context({'rentals': template_data}))
         send_mail(subject="Dein Ausleihvorgang", message=message, html_message=message,
                   from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[template_data[0]['reservation'].reserver.user.email])
         return Response(ret_data)
+
+    @ action(detail=False, methods=['POST'], url_path="return", permission_classes=[permissions.IsAuthenticated])
+    def bulk_return(self, request: Request):
+        """
+        takes a list of rental ids and ends their rental duration to now.
+        @return either return 400 if it does not find some rentals. otherwise returns number of changed objects
+        """
+        queryset = models.Rental.objects.filter(
+            pk__in=request.data, received_back_at=None)
+        if len(queryset) != len(request.data):
+            return Response("couldn't find some of those rentals", status=status.HTTP_400_BAD_REQUEST)
+        updated = queryset.update(
+            reserved_until= timezone.now().date(), received_back_at=timezone.now())
+        return Response(updated)
 
 
 class TextViewSet(viewsets.ModelViewSet):
@@ -468,7 +494,7 @@ class FilesViewSet(viewsets.ModelViewSet):
             queryset.filter(name=self.request.GET['name'])
         return queryset
 
-    @action(detail=False, methods=['POST'], url_path="rental_form_template", permission_classes=[permissions.IsAdminUser])
+    @ action(detail=False, methods=['POST'], url_path="rental_form_template", permission_classes=[permissions.IsAdminUser])
     def update_rental_form_set(self, request: Request):
         data = request.data
         instance = models.Files.objects.get(name='rental_form')
@@ -477,7 +503,7 @@ class FilesViewSet(viewsets.ModelViewSet):
             instance=instance).is_valid(raise_exception=True).save()
         return Response(data=data)
 
-    @action(detail=False, methods=['GET'], url_path="download", permission_classes=[permissions.IsAdminUser])
+    @ action(detail=False, methods=['GET'], url_path="download", permission_classes=[permissions.IsAdminUser])
     def download(self, request: Request):
         if ('name' not in request.GET):
             return HttpResponse("missing 'name' query param", status.HTTP_400_BAD_REQUEST)

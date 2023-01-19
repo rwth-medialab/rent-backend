@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'corsheaders',
     # cleans /media on deletion of database related files
     'django_cleanup.apps.CleanupConfig',
+    'django_extensions'
 ]
 
 MIDDLEWARE = [
