@@ -209,6 +209,15 @@ class ReservationProfileSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ReservationSerializer(serializers.ModelSerializer):
+    def __init__(self, *args, **kwargs):
+        """
+        remove some of the fields depending on the person, non staff people see less information
+        """
+        request: Request = kwargs.get(
+            'context', {}).get('request')  # type: ignore
+        super(ReservationSerializer, self).__init__(*args, **kwargs)
+        if request == None or not request.user.is_staff:
+            self.fields.pop('reserver')
     reserver = ReservationProfileSerializer(read_only=True)
     objecttype = RentalObjectTypeSerializer(read_only=True)
     class Meta:
@@ -219,7 +228,7 @@ class ReservationSerializer(serializers.ModelSerializer):
 class RentalSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         """
-        do not tell the renting person the person who rented them the object
+        remove some of the fields depending on the person, non staff people see less information
         """
         request: Request = kwargs.get(
             'context', {}).get('request')  # type: ignore
