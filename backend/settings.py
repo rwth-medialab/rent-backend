@@ -114,12 +114,12 @@ OAUTH_CLIENTS = {
     'oauth': {
         'client_id': os.environ.get('OAUTH_CLIENT_ID'),
         'scope': os.environ.get('OAUTH_SCOPE'),
-        'OAUTH_AUTHORIZATION_CODE_URL': os.environ.get('OAUTH_CLIENT_ID'),
-        'OAUTH_ACCESS_TOKEN_URL': os.environ.get('OAUTH_CLIENT_ID'),
-        'OAUTH_VERIFICATION_URL':os.environ.get('OAUTH_CLIENT_ID'),
-        'OAUTH_VERIFICATIONDATA_ENDPOINT': os.environ.get('OAUTH_CLIENT_ID'),
-        'OAUTH_DATA_KEY': os.environ.get('OAUTH_CLIENT_ID'),
-        'OAUTH_DATA_VALUE': os.environ.get('OAUTH_CLIENT_ID')
+        'OAUTH_AUTHORIZATION_CODE_URL': os.environ.get('OAUTH_AUTHORIZATION_CODE_URL'),
+        'OAUTH_ACCESS_TOKEN_URL': os.environ.get('OAUTH_ACCESS_TOKEN_URL'),
+        'OAUTH_VERIFICATION_URL':os.environ.get('OAUTH_VERIFICATION_URL'),
+        'OAUTH_VERIFICATIONDATA_ENDPOINT': os.environ.get('OAUTH_VERIFICATIONDATA_ENDPOINT'),
+        'OAUTH_DATA_KEY': os.environ.get('OAUTH_DATA_KEY'),
+        'OAUTH_DATA_VALUE': os.environ.get('OAUTH_DATA_VALUE')
     }
 }
 

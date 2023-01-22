@@ -87,7 +87,7 @@ class UserViewSet(viewsets.ModelViewSet):
             user=request.user)
         if len(process) > 0:
             if process.first().access_token == None:
-                return Response({"url": settings.OAUTH_CLIENTS['oauth']['verification_url'] + process.first().user_code, "max_refresh_interval": process.first().ping_interval.seconds})
+                return Response({"url": settings.OAUTH_CLIENTS['oauth']['OAUTH_VERIFICATION_URL'] + process.first().user_code, "max_refresh_interval": process.first().ping_interval.seconds})
             else:
                 # delete process expired restart process by deleting it
                 if process.first().access_token != None and process.first().verification_process_expires < timezone.now():
@@ -96,7 +96,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     process.first().delete()
                 else:
                     return Response({"url": "", "max_refresh_interval": 0})
-        rsp = requests.post(settings.OAUTH_CLIENTS['oauth']['authorization_code_url'], data={
+        rsp = requests.post(settings.OAUTH_CLIENTS['oauth']['OAUTH_AUTHORIZATION_CODE_URL'], data={
                             "client_id": settings.OAUTH_CLIENTS['oauth']['client_id'], 'scope': settings.OAUTH_CLIENTS['oauth']['scope']})
 
         rsp = rsp.json()
@@ -139,7 +139,7 @@ class UserViewSet(viewsets.ModelViewSet):
             # if the current process contains a access_token the verification process is done if not we have to call the api and ask if the user endet his/her verification
             process.last_ping = timezone.now()
             process.save()
-            accesstokenrsp = requests.post(settings.OAUTH_CLIENTS['oauth']['access_token_url'], data={
+            accesstokenrsp = requests.post(settings.OAUTH_CLIENTS['oauth']['OAUTH_ACCESS_TOKEN_URL'], data={
                 "client_id": settings.OAUTH_CLIENTS['oauth']['client_id'], "code": process.device_code, "grant_type": "device"})
             data = accesstokenrsp.json()
             if data['access_token'] != None:
@@ -152,12 +152,13 @@ class UserViewSet(viewsets.ModelViewSet):
         if process.access_token != None and not request.user.profile.verified:
             # important part get data from api and update user profile and priorities accordingly.
             userdata = requests.get(
-                settings.OAUTH_CLIENTS['oauth']['api_verificationdata_endpoint']+process.access_token).json()
+                settings.OAUTH_CLIENTS['oauth']['OAUTH_VERIFICATIONDATA_ENDPOINT']+process.access_token).json()
             logger.info(userdata)
             if userdata["IsError"]:
                 return Response("there was an error while calling the api. please write an message to us")
             #TODO TESTING REPLACE with correct api endpoint and faculty 
-            if "Data" in userdata and "Faculty" in userdata["Data"] and userdata["Data"]["Faculty"] == "1.2":
+            data_field = settings.OAUTH_CLIENTS['oauth']['OAUTH_DATA_KEY']
+            if "Data" in userdata and data_field in userdata["Data"] and userdata["Data"][data_field] == settings.OAUTH_CLIENTS['oauth']['OAUTH_DATA_VALUE']:
                 logger.debug("user: " + str(request.user.pk) +
                              " has been automatically verified") 
                 request.user.profile.verified = True
@@ -363,6 +364,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
         if 'operation_number' in getdict:
             queryset = queryset.filter(
                 operation_number=getdict['operation_number'])
+        if "self" in self.request.GET and self.request.GET["self"] in ["true", "True"]:
+            # query only own rentals (necessary for users without special rights)
+            queryset = queryset.filter(reserver=self.request.user.profile)
         return queryset
 
     @action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
@@ -453,6 +457,11 @@ class RentalViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(reservation__reserver=self.request.user)
         if "open" in self.request.GET and self.request.GET["open"] in ["true", "True"]:
             queryset = queryset.filter(received_back_at__isnull=True)
+
+        if "self" in self.request.GET and self.request.GET["self"] in ["true", "True"]:
+            # query only own rentals (necessary for users without special rights)
+            queryset = queryset.filter(reservation__reserver=self.request.user.profile)
+            
         return queryset
 
     @ action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
