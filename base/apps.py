@@ -57,4 +57,4 @@ class BaseConfig(AppConfig):
 
         if not models.Text.objects.filter(name='signup_mail').exists():
             models.Text.objects.create(
-                name='signup_mail', content="Hallo {{first_name}}, bitte aktiviere dein Konto unter {{validation_link}}")
+                name='signup_mail', content=r"Hallo {{first_name}}, bitte aktiviere dein Konto unter {{validation_link}}")
