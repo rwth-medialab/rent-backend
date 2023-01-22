@@ -48,6 +48,12 @@ class BaseConfig(AppConfig):
         if not models.Priority.objects.filter(prio=99).exists():
             models.Priority.objects.create(
                 prio=99, name="unverified", description="Default renting class, should be the one with the shortest renting durations")
+        if not models.Priority.objects.filter(prio=50, name="automatically verified").exists():
+            models.Priority.objects.create(
+                prio=50, name="automatically verified", description="Person is automatically verified.")
+        if not models.Priority.objects.filter(prio=49).exists():
+            models.Priority.objects.create(
+                prio=49, name="manually verified", description="Person is manually verified.")
 
         if not models.Text.objects.filter(name='signup_mail').exists():
             models.Text.objects.create(

@@ -41,6 +41,9 @@ class Profile(models.Model):
         Priority, on_delete=models.SET_NULL, null=True, blank=True, default=Priority.objects.get(prio=99).id)
     newsletter = models.BooleanField(
         verbose_name='newsletter signup', default=False, blank=True)
+    automatically_verifiable = models.BooleanField(verbose_name="tells if someone is automatically verifiable, set to false if it fails", default=True, blank=True)
+    # to remove the banner we will ask the user only for verification if the user is not verified yet
+    verified = models.BooleanField(default=False)
 
     def __str__(self) -> str:
         return self.user.username
@@ -364,3 +367,18 @@ class Files(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class OauthVerificationProcess(models.Model):
+    # since we do not need the Process if a user gets deleted 
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user_code = models.CharField(max_length=100)
+    device_code = models.CharField(max_length=100) 
+    ping_interval = models.DurationField(default=timedelta(seconds=5))
+    last_ping = models.DateTimeField(null=True, blank=True, verbose_name="last time the server got pinged")
+    verification_process_expires = models.DateTimeField()
+    target = models.CharField(max_length=100,verbose_name="id a provider", blank=True)
+    access_token = models.CharField(max_length=130,null=True, blank=True, default=None)
+    access_token_exipiry = models.DateTimeField(null=True, blank=True, default=None)
+    refresh_token = models.CharField(max_length=130, null=True, blank=True)
+    faculty = models.CharField(max_length=100)

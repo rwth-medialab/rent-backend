@@ -8,5 +8,7 @@ Pillow>=9.2,<10
 django-cors-headers>=3.13.0, <4
 django-cleanup>=6.0.0, <7 
 docxtpl>=0.16.5
+Authlib>=1.2.0, <2
 django-extensions
 pydotplus
+requests

@@ -110,6 +110,19 @@ TEMPLATES = [
     },
 ]
 
+OAUTH_CLIENTS = {
+    'oauth': {
+        'client_id': os.environ.get('OAUTH_CLIENT_ID'),
+        'scope': os.environ.get('OAUTH_SCOPE'),
+        'OAUTH_AUTHORIZATION_CODE_URL': os.environ.get('OAUTH_CLIENT_ID'),
+        'OAUTH_ACCESS_TOKEN_URL': os.environ.get('OAUTH_CLIENT_ID'),
+        'OAUTH_VERIFICATION_URL':os.environ.get('OAUTH_CLIENT_ID'),
+        'OAUTH_VERIFICATIONDATA_ENDPOINT': os.environ.get('OAUTH_CLIENT_ID'),
+        'OAUTH_DATA_KEY': os.environ.get('OAUTH_CLIENT_ID'),
+        'OAUTH_DATA_VALUE': os.environ.get('OAUTH_CLIENT_ID')
+    }
+}
+
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 
@@ -124,7 +137,7 @@ DATABASES = {
         'USER': os.environ.get('POSTGRES_USER'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
         'HOST': os.environ.get('POSTGRES_HOST'),
-        'PORT': int(os.environ.get('POSTGRES_PORT')),# type: ignore
+        'PORT': int(os.environ.get('POSTGRES_PORT')),  # type: ignore
     }
 }
 
@@ -182,7 +195,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 EMAIL_VALIDATION_HASH_SALT = str(os.environ.get('EMAIL_VALIDATION_HASH_SALT'))
 
 # EMAIL
-EMAIL_TEST=str(os.environ.get('EMAIL_TEST')).lower() == 'true'
+EMAIL_TEST = str(os.environ.get('EMAIL_TEST')).lower() == 'true'
 if EMAIL_TEST:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 EMAIL_HOST = str(os.environ.get('EMAIL_HOST'))
@@ -191,7 +204,7 @@ if (str(os.environ.get('EMAIL_REQUIRES_LOGIN')).lower() == 'true'):
     EMAIL_HOST_USER = str(os.environ.get('EMAIL_HOST_USER'))
     EMAIL_PASSWORD = str(os.environ.get('EMAIL_PASSWORD'))
 EMAIL_PORT = str(os.environ.get('EMAIL_PORT'))
-EMAIL_USE_TLS =  str(os.environ.get('EMAIL_USE_TLS')).lower() == "true"
+EMAIL_USE_TLS = str(os.environ.get('EMAIL_USE_TLS')).lower() == "true"
 EMAIL_USE_SSL = str(os.environ.get('EMAIL_USE_SSL')).lower() == "true"
 DEFAULT_FROM_EMAIL = str(os.environ.get('DEFAULT_FROM_EMAIL'))
 
@@ -207,6 +220,6 @@ DEFAULT_RETURNING_END_HOUR = 12
 
 # if diff exceeds a day the calculation is done somewhere else e.g. views.RentalObjectTypeViewSet.available
 diff_in_days = 0
-DEFAULT_OFFSET_BETWEEN_RENTALS = timedelta(days=diff_in_days) 
+DEFAULT_OFFSET_BETWEEN_RENTALS = timedelta(days=diff_in_days)
 
-EMAIL_VALIDATION_REGEX='\\S+@([a-zA-Z0-9]+\\.)?rwth-aachen\\.de'
+EMAIL_VALIDATION_REGEX = '\\S+@([a-zA-Z0-9]+\\.)?rwth-aachen\\.de'

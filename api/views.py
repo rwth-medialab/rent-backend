@@ -11,6 +11,8 @@ from django.core.exceptions import FieldError
 from django.db.models import Max, Q, F
 from django.utils import timezone
 from django.http import HttpResponse, FileResponse
+from django.shortcuts import redirect
+import os
 
 from rest_framework import status
 from rest_framework.request import Request
@@ -23,6 +25,7 @@ from rest_framework.decorators import api_view, action, authentication_classes, 
 from knox.views import LoginView as KnoxLoginView
 from knox.auth import TokenAuthentication
 
+
 from .serializers import ObjectTypeInfoSerializer, CategorySerializer, UserSerializer, RentalObjectSerializer, UserCreationSerializer, GroupSerializer, KnowLoginUserSerializer, RentalObjectTypeSerializer, ReservationSerializer, RentalSerializer, TagSerializer, TextSerializer
 from .permissions import UserPermission, GroupPermission
 from api import serializers
@@ -33,9 +36,11 @@ from base import models
 from docxtpl import DocxTemplate
 import io
 
+import requests
 
 # Allow to Login with Basic auth for testing purposes
 import logging
+import sys
 
 logger = logging.getLogger(name="django")
 
@@ -64,7 +69,8 @@ def checkCredentials(request: Request):
     """
     Api Endpoint to check if credentials are valid
     """
-    return (Response(status=200))
+    serializer = serializers.KnowLoginUserSerializer(request.user)
+    return (Response(serializer.data,status=200))
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -74,6 +80,99 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-date_joined')
     serializer_class = UserSerializer
     permission_classes = [UserPermission]
+
+    @action(detail=False, methods=['post'], url_path="oauth/verify", permission_classes=[permissions.IsAuthenticated])
+    def verify_with_oauth(self, request: Request):
+        process = models.OauthVerificationProcess.objects.filter(
+            user=request.user)
+        if len(process) > 0:
+            if process.first().access_token == None:
+                return Response({"url": settings.OAUTH_CLIENTS['oauth']['verification_url'] + process.first().user_code, "max_refresh_interval": process.first().ping_interval.seconds})
+            else:
+                # delete process expired restart process by deleting it
+                if process.first().access_token != None and process.first().verification_process_expires < timezone.now():
+                    logger.info(
+                        "session expired. WIP: use refresh_token, to request a new access_token")
+                    process.first().delete()
+                else:
+                    return Response({"url": "", "max_refresh_interval": 0})
+        rsp = requests.post(settings.OAUTH_CLIENTS['oauth']['authorization_code_url'], data={
+                            "client_id": settings.OAUTH_CLIENTS['oauth']['client_id'], 'scope': settings.OAUTH_CLIENTS['oauth']['scope']})
+
+        rsp = rsp.json()
+        device_code = rsp['device_code']
+        user_code = rsp['user_code']
+        url = settings.OAUTH_CLIENTS['oauth']['verification_url'] + user_code
+        verifaction_process = models.OauthVerificationProcess.objects.create(
+            device_code=device_code,
+            user_code=user_code,
+            ping_interval=timedelta(seconds=rsp['interval']),
+            verification_process_expires=timezone.now(
+            ) + timedelta(seconds=rsp['expires_in']),
+            user=request.user)
+        verifaction_process.save()
+
+        # logger.info(state)
+        return Response({"url": url, "max_refresh_interval": rsp['interval']})
+
+    @action(detail=False, methods=['post'], url_path="oauth/token", permission_classes=[permissions.IsAuthenticated])
+    def get_access_token(self, request: Request):
+        """
+        this function calls the OAUTH-Endpoint and fetches the accesstoken if none is already present, if one is present the api is called and the status is verfied and written  to the profile and the priority is set to a verified state
+        """
+        # first we check if there is a process for this account
+        process = models.OauthVerificationProcess.objects.filter(
+            user=request.user)
+        if len(process) == 0:
+            return Response("Expired. Please start the verification process by calling /oauth/verify", status=status.HTTP_400_BAD_REQUEST)
+        process = process.first()
+        if process.access_token == None and process.verification_process_expires < timezone.now():
+            # check if the verification process is expired and delete it if it is
+            process.delete()
+            return Response("verificationsprocess expired, please restart the process", status=status.HTTP_400_BAD_REQUEST)
+
+        if (process.last_ping != None and process.last_ping+process.ping_interval > timezone.now()):
+            # we prevent the external API from being called to often, therefore we limit it ourselves
+            return Response({'status': "error", "description": "Please slow down, we are not allowed to ping the auth server that often"}, status=status.HTTP_400_BAD_REQUEST)
+        data = {"verified": False}
+        if process.access_token == None:
+            # if the current process contains a access_token the verification process is done if not we have to call the api and ask if the user endet his/her verification
+            process.last_ping = timezone.now()
+            process.save()
+            accesstokenrsp = requests.post(settings.OAUTH_CLIENTS['oauth']['access_token_url'], data={
+                "client_id": settings.OAUTH_CLIENTS['oauth']['client_id'], "code": process.device_code, "grant_type": "device"})
+            data = accesstokenrsp.json()
+            if data['access_token'] != None:
+                process.access_token = data['access_token']
+                process.refresh_token = data['refresh_token']
+                process.access_token_exipiry = timezone.now(
+                ) + timedelta(seconds=data['expires_in'])
+                process.save()
+            process.refresh_from_db()
+        if process.access_token != None and not request.user.profile.verified:
+            # important part get data from api and update user profile and priorities accordingly.
+            userdata = requests.get(
+                settings.OAUTH_CLIENTS['oauth']['api_verificationdata_endpoint']+process.access_token).json()
+            logger.info(userdata)
+            if userdata["IsError"]:
+                return Response("there was an error while calling the api. please write an message to us")
+            #TODO TESTING REPLACE with correct api endpoint and faculty 
+            if "Data" in userdata and "Faculty" in userdata["Data"] and userdata["Data"]["Faculty"] == "1.2":
+                logger.debug("user: " + str(request.user.pk) +
+                             " has been automatically verified") 
+                request.user.profile.verified = True
+                request.user.profile.prio = models.Priority.objects.get(
+                    prio=50, name__contains="automatically")
+                request.user.profile.save()
+            else:
+                request.user.profile.automatically_verifiable = False
+                request.user.profile.save()
+                data = {"automatically_verifiable" :False}
+                logger.debug("user: " + str(request.user.pk) +
+                             " couldn't be automatically verified. \n" + str(userdata))
+        if request.user.profile.verified:
+            data = {"verified": True}
+        return Response(data)
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def email_validation(self, request: Request):
@@ -401,7 +500,7 @@ class RentalViewSet(viewsets.ModelViewSet):
         if len(queryset) != len(request.data):
             return Response("couldn't find some of those rentals", status=status.HTTP_400_BAD_REQUEST)
         updated = queryset.update(
-            reserved_until= timezone.now().date(), received_back_at=timezone.now())
+            reserved_until=timezone.now().date(), received_back_at=timezone.now())
         return Response(updated)
 
 
