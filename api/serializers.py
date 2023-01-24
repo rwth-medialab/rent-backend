@@ -4,6 +4,9 @@ from rest_framework.exceptions import ParseError
 from rest_framework.request import Request
 from rest_framework import validators
 from django.db import transaction
+from django.utils import timezone
+from django.conf import settings
+from django.db.models import Q
 import logging
 import re
 from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, ObjectTypeInfo, Text, Profile
@@ -132,10 +135,11 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
 
         return instance
 
+
 class AdminUserSerializer(serializers.ModelSerializer):
     class Meta:
-        model= User
-        exclude=['password']
+        model = User
+        exclude = ['password']
 
 
 class KnowLoginUserSerializer(serializers.ModelSerializer):
@@ -143,6 +147,7 @@ class KnowLoginUserSerializer(serializers.ModelSerializer):
         'get_user_permissions_name')
 
     profile = ProfileSerializer(read_only=True)
+
     class Meta:
         model = User
         fields = ['username', 'email', 'groups',
@@ -160,9 +165,20 @@ class GroupSerializer(serializers.HyperlinkedModelSerializer):
 
 
 class RentalObjectSerializer(serializers.ModelSerializer):
+    currently_in_house = serializers.SerializerMethodField(
+        required=False, read_only=True)
+    merged_identifier = serializers.SerializerMethodField(
+        required=False, read_only=True)
+
     class Meta:
         model = RentalObject
         fields = '__all__'
+
+    def get_currently_in_house(self, obj: models.RentalObject) -> bool:
+        return obj.rental_set.filter(Q(Q(handed_out_at__lte=timezone.now()) & Q(Q(received_back_at__gte=timezone.now()) | Q(received_back_at__isnull=True)))).count() == 0
+
+    def get_merged_identifier(self, obj: models.RentalObject) -> str:
+        return obj.type.prefix_identifier + str(obj.internal_identifier)
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -202,46 +218,73 @@ class BulkReservationSerializer(serializers.ModelSerializer):
                 detail="There are not enough objects of this type to fullfill your reservation")
         return data
 
+
 class ReservationProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+
     class Meta:
         model = models.Profile
         fields = '__all__'
 
+
 class ReservationSerializer(serializers.ModelSerializer):
-    def __init__(self, *args, **kwargs):
-        """
-        remove some of the fields depending on the person, non staff people see less information
-        """
-        request: Request = kwargs.get(
-            'context', {}).get('request')  # type: ignore
-        super(ReservationSerializer, self).__init__(*args, **kwargs)
-        if request == None or not request.user.is_staff:
-            self.fields.pop('reserver')
+    objecttype = RentalObjectTypeSerializer(read_only=True)
+    fullfilled = serializers.SerializerMethodField(
+        required=False, read_only=True)
+
+    class Meta:
+        model = models.Reservation
+        #fields = '__all__'
+        exclude = ['reserver']
+
+    def get_fullfilled(self, obj):
+        return obj.rental_set.all().count() > 0
+
+
+class ReservationAdminSerializer(serializers.ModelSerializer):
     reserver = ReservationProfileSerializer(read_only=True)
     objecttype = RentalObjectTypeSerializer(read_only=True)
+    fullfilled = serializers.SerializerMethodField(
+        required=False, read_only=True)
+
     class Meta:
         model = models.Reservation
         fields = '__all__'
 
+    def get_fullfilled(self, obj):
+        return obj.rental_set.all().count() > 0
+
 
 class RentalSerializer(serializers.ModelSerializer):
-    def __init__(self, *args, **kwargs):
-        """
-        remove some of the fields depending on the person, non staff people see less information
-        """
-        request: Request = kwargs.get(
-            'context', {}).get('request')  # type: ignore
-        super(RentalSerializer, self).__init__(*args, **kwargs)
-        if request == None or not request.user.is_staff:
-            self.fields.pop('return_processor')
-            self.fields.pop('lender')
-    rented_object = RentalObjectSerializer(required=False)
-    reservation = ReservationSerializer(required=False)
+    rented_object = RentalObjectSerializer(required=False, read_only=True)
+    reservation = ReservationAdminSerializer(required=False, read_only=True)
+    extendable = serializers.SerializerMethodField(
+        required=False, read_only=True)
 
     class Meta:
         model = Rental
         fields = '__all__'
+
+    def validate_reserved_until(self, reserved_until):
+        """
+        enforce that we do not overlap rentals on one object
+        """
+        if self.instance.reserved_until!=reserved_until and models.RentalObjectType.available(pk=self.instance.rented_object.type.pk, from_date=self.instance.reserved_until +
+                                             settings.DEFAULT_OFFSET_BETWEEN_RENTALS, until_date=reserved_until)['available'] == 0:
+            raise serializers.ValidationError(
+                "reserved until overlaps with a reservation or rental")
+        return reserved_until
+
+    # default extension time = 1 week
+    def get_extendable(self, obj) -> bool:
+        """
+        checking if the object is extendable by 1 week returns true if it is
+        """
+        # reserved_from + offset should result in the reseved + offset + offset for reparations
+        available = models.RentalObjectType.available(pk=obj.rented_object.type.pk, from_date=obj.reserved_until +
+                                                      settings.DEFAULT_OFFSET_BETWEEN_RENTALS, until_date=obj.reserved_until+timedelta(weeks=1))
+        return available["available"] >= 1
+
 
 class RentalCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -272,7 +315,8 @@ class SettingsSerializer(serializers.ModelSerializer):
         model = models.Settings
         fields = ['type', 'value', 'id']
 
+
 class FilesSerializer(serializers.ModelSerializer):
     class Meta:
-        model=models.Files
+        model = models.Files
         fields = '__all__'

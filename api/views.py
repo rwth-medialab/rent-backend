@@ -91,8 +91,6 @@ class UserViewSet(viewsets.ModelViewSet):
             else:
                 # delete process expired restart process by deleting it
                 if process.first().access_token != None and process.first().verification_process_expires < timezone.now():
-                    logger.info(
-                        "session expired. WIP: use refresh_token, to request a new access_token")
                     process.first().delete()
                 else:
                     return Response({"url": "", "max_refresh_interval": 0})
@@ -153,7 +151,6 @@ class UserViewSet(viewsets.ModelViewSet):
             # important part get data from api and update user profile and priorities accordingly.
             userdata = requests.get(
                 settings.OAUTH_CLIENTS['oauth']['OAUTH_VERIFICATIONDATA_ENDPOINT']+process.access_token).json()
-            logger.info(userdata)
             if userdata["IsError"]:
                 return Response("there was an error while calling the api. please write an message to us")
             #TODO TESTING REPLACE with correct api endpoint and faculty 
@@ -346,14 +343,17 @@ class ReservationViewSet(viewsets.ModelViewSet):
     serializer_class = ReservationSerializer
     # TODO assign rights
     permission_classes = [permissions.AllowAny]
+    def get_serializer_class(self):
+        return serializers.ReservationAdminSerializer if self.request.user.is_staff else serializers.ReservationSerializer
 
     def get_queryset(self):
         queryset = Reservation.objects.all()
         getdict = self.request.GET
-        if 'from' in getdict:
-            queryset = queryset.filter(reserved_from__gte=getdict['from'])
-        if 'until' in getdict:
-            queryset = queryset.filter(reserved_from__lte=getdict['until'])
+        if 'reserved_from' in getdict:
+            # we fetch all starting after that
+            queryset = queryset.filter(reserved_from__gte=getdict['reserved_from'])
+        if 'reserved_until' in getdict:
+            queryset = queryset.filter(reserved_from__lte=getdict['reserved_until'])
         if 'open' in getdict:
             if getdict['open'] in ['true', 'True']:
                 # remove all reservations that already got a corresponding rental
@@ -367,7 +367,29 @@ class ReservationViewSet(viewsets.ModelViewSet):
         if "self" in self.request.GET and self.request.GET["self"] in ["true", "True"]:
             # query only own rentals (necessary for users without special rights)
             queryset = queryset.filter(reserver=self.request.user.profile)
+        if 'canceled' in getdict:
+            if getdict['canceled'] in ['false', 'False']:
+                queryset = queryset.filter(canceled__isnull=True)
         return queryset
+
+    @action(detail=True, methods=['POST'], url_path="cancel", permission_classes=[permissions.IsAuthenticated])
+    def cancel_reservation(self, request: Request, pk=None):
+        reservation = Reservation.objects.get(pk=pk)
+        if request.user != reservation.reserver.user and not request.user.is_staff:
+            return Response("Not allowed", status=status.HTTP_400_BAD_REQUEST)
+        if reservation.canceled != None:
+            return Response("already canceled", status=status.HTTP_400_BAD_REQUEST)
+        reservation.canceled = timezone.now()
+        reservation.save()
+        serializer = ReservationSerializer(reservation)
+        template_data = serializer.data
+        template = Template(models.Text.objects.filter(
+            name='reservation_cancel_mail').first().content)
+        message = template.render(Context(template_data))
+        send_mail(subject="Deine Reservierung", message=message, html_message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[reservation.reserver.user.email])
+
+        return Response(serializer.data)
 
     @action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
     def bulk_create(self, request: Request):
@@ -390,8 +412,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
                     reserved_until=reservation["reserved_until"],
                     objecttype=reservation["objecttype"],
                     reserver=request.user.profile.pk).exclude(
-                        rental__in=Rental.objects.filter(rented_object__type=reservation['objecttype'])).count() == 0:
-                logger.info("resre")
+                        rental__in=Rental.objects.filter(rented_object__type=reservation['objecttype'])).exclude(canceled__isnull=False).count() == 0:
                 reservation['operation_number'] = operation_number
                 reservation['reserver'] = request.user.profile.pk
                 serializer = serializers.BulkReservationSerializer(
@@ -413,7 +434,6 @@ class ReservationViewSet(viewsets.ModelViewSet):
                          "lenting_end_hour": models.Settings.objects.get(type="lenting_end_hour").value,
                          "returning_start_hour": models.Settings.objects.get(type="returning_start_hour").value,
                          "returning_end_hour": models.Settings.objects.get(type="returning_end_hour").value, }
-        logger.info(template_data)
         template = Template(models.Text.objects.filter(
             name='reservation_confirmation_mail').first().content.replace(r"%}}</p>", r"%}}").replace(r"<p>{{%", r"{{%"))
         message = template.render(Context(template_data))
@@ -461,8 +481,25 @@ class RentalViewSet(viewsets.ModelViewSet):
         if "self" in self.request.GET and self.request.GET["self"] in ["true", "True"]:
             # query only own rentals (necessary for users without special rights)
             queryset = queryset.filter(reservation__reserver=self.request.user.profile)
-            
         return queryset
+
+    @ action(detail=True, methods=['POST'], url_path="extend", permission_classes=[permissions.IsAuthenticated])
+    def extend_rental(self,request:Request, pk=None):
+        rental = models.Rental.objects.get(pk=pk)
+        serializer = serializers.RentalSerializer(rental, context={'request': request})
+        if serializer.data['extendable']:
+            daydiff = (rental.reserved_until-timezone.now().date()).days
+            if (not request.user.is_staff) and (daydiff>=2 or daydiff<0):
+                return Response(f"Daydiff = {daydiff}, only 1 and 2 are possible values", status=status.HTTP_400_BAD_REQUEST)
+            elif (daydiff>=9 or daydiff<0):
+                return Response(f"Daydiff = {daydiff}, only values between 9 and 1 are possible values", status=status.HTTP_400_BAD_REQUEST)
+            else:
+                rental.reserved_until += timedelta(weeks=1)
+                rental.save()
+                serializer = serializers.RentalSerializer(rental, context={'request': request})
+                return Response(serializer.data)
+        else:
+            return Response("nicht erweiterbar", status=status.HTTP_400_BAD_REQUEST)
 
     @ action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
     def bulk_rental_creation(self, request: Request):

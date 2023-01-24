@@ -109,9 +109,9 @@ class RentalObjectType(models.Model):
         # remove all objects with an status from objects
         objects = RentalObject.objects.all().filter(
             type=pk).exclude(rentable=False).exclude(rentalobjectstatus__in=object_status)
-        # exclude reservations that are already related to an rental
+        # exclude reservations that are already related to an rental also exclude them from counting if they are canceled
         reservations = Reservation.objects.filter(
-            objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date()).exclude(rental__in=Rental.objects.filter(rented_object__type=pk))
+            objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date()).exclude(rental__in=Rental.objects.filter(rented_object__type=pk)).exclude(canceled__isnull=False)
         rentals = Rental.objects.filter(
             rented_object__in=objects, handed_out_at__lte=until_date, reserved_until__gte=from_date.date())
 
@@ -136,7 +136,7 @@ class RentalObjectType(models.Model):
                     blocked_timerange['until_date']+offset)
                 if until_date_with_offset.isoweekday() != settings.DEFAULT_LENTING_DAY_OF_WEEK:
                     # since weekday is not a Lenting day we extend the "occupied/lended" state until the next lenting day
-                    offset += timedelta(days=7-abs(
+                    until_date_with_offset += timedelta(days=7-abs(
                         until_date_with_offset.isoweekday()-settings.DEFAULT_LENTING_DAY_OF_WEEK))
                 if blocked_timerange['from_date'] <= current_date < blocked_timerange['until_date'] + offset:
                     temp_value += 1
@@ -234,6 +234,7 @@ class Reservation(models.Model):
     objecttype = models.ForeignKey(RentalObjectType, on_delete=models.CASCADE)
     operation_number = models.BigIntegerField()
     count = models.PositiveSmallIntegerField()
+    canceled = models.DateTimeField(null=True, blank=True, default=None)
 
     def __str__(self) -> str:
         return 'reservation: ' + str(self.operation_number)
@@ -253,7 +254,6 @@ class Rental(models.Model):
                                default=None, on_delete=models.CASCADE, related_name='lender')
     return_processor = models.ForeignKey(User, blank=True, null=True, default=None, on_delete=models.CASCADE,
                                          related_name='return_processor', verbose_name='person who processes the return')
-    canceled = models.DateTimeField(null=True, blank=True, default=None)
     rental_number = models.BigIntegerField()
     handed_out_at = models.DateTimeField(default=timezone.now)
     received_back_at = models.DateTimeField(
