@@ -345,6 +345,7 @@ class Suggestion(models.Model):
         RentalObjectType, on_delete=models.CASCADE, related_name='suggestion')
     suggestion_for = models.ForeignKey(
         RentalObjectType, on_delete=models.CASCADE, related_name='suggestion_for')
+    description = models.TextField(verbose_name="Description, why is this a suggestion for the other one?", default="")
 
 
 class MaxRentDuration(models.Model):

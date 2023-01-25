@@ -269,8 +269,8 @@ class RentalSerializer(serializers.ModelSerializer):
         """
         enforce that we do not overlap rentals on one object
         """
-        if self.instance.reserved_until!=reserved_until and models.RentalObjectType.available(pk=self.instance.rented_object.type.pk, from_date=self.instance.reserved_until +
-                                             settings.DEFAULT_OFFSET_BETWEEN_RENTALS, until_date=reserved_until)['available'] == 0:
+        if self.instance.reserved_until != reserved_until and models.RentalObjectType.available(pk=self.instance.rented_object.type.pk, from_date=self.instance.reserved_until +
+                                                                                                settings.DEFAULT_OFFSET_BETWEEN_RENTALS, until_date=reserved_until)['available'] == 0:
             raise serializers.ValidationError(
                 "reserved until overlaps with a reservation or rental")
         return reserved_until
@@ -320,3 +320,16 @@ class FilesSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Files
         fields = '__all__'
+
+
+class SuggestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Suggestion
+        fields = '__all__'
+        validators = [
+            validators.UniqueTogetherValidator(
+                queryset=models.Suggestion.objects.all(),
+                fields=['suggestion', 'suggestion_for'],
+                message="you can not have the same combination of suggestion an suggestion twice"
+            ),
+        ]

@@ -9,6 +9,7 @@ from django.template.loader import get_template
 from django.forms.models import model_to_dict
 from django.core.exceptions import FieldError
 from django.db.models import Max, Q, F
+from django.db import transaction
 from django.utils import timezone
 from django.http import HttpResponse, FileResponse
 from django.shortcuts import redirect
@@ -70,7 +71,7 @@ def checkCredentials(request: Request):
     Api Endpoint to check if credentials are valid
     """
     serializer = serializers.KnowLoginUserSerializer(request.user)
-    return (Response(serializer.data,status=200))
+    return (Response(serializer.data, status=200))
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -153,11 +154,11 @@ class UserViewSet(viewsets.ModelViewSet):
                 settings.OAUTH_CLIENTS['oauth']['OAUTH_VERIFICATIONDATA_ENDPOINT']+process.access_token).json()
             if userdata["IsError"]:
                 return Response("there was an error while calling the api. please write an message to us")
-            #TODO TESTING REPLACE with correct api endpoint and faculty 
+            # TODO TESTING REPLACE with correct api endpoint and faculty
             data_field = settings.OAUTH_CLIENTS['oauth']['OAUTH_DATA_KEY']
             if "Data" in userdata and data_field in userdata["Data"] and userdata["Data"][data_field] == settings.OAUTH_CLIENTS['oauth']['OAUTH_DATA_VALUE']:
                 logger.debug("user: " + str(request.user.pk) +
-                             " has been automatically verified") 
+                             " has been automatically verified")
                 request.user.profile.verified = True
                 request.user.profile.prio = models.Priority.objects.get(
                     prio=50, name__contains="automatically")
@@ -165,7 +166,7 @@ class UserViewSet(viewsets.ModelViewSet):
             else:
                 request.user.profile.automatically_verifiable = False
                 request.user.profile.save()
-                data = {"automatically_verifiable" :False}
+                data = {"automatically_verifiable": False}
                 logger.debug("user: " + str(request.user.pk) +
                              " couldn't be automatically verified. \n" + str(userdata))
         if request.user.profile.verified:
@@ -257,6 +258,38 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
     # TODO Allow update/partial inventory rights
     permission_classes = [permissions.AllowAny]
 
+    # TODO add Permission for admin with inv rights
+    @action(detail=True, url_path="suggestions", methods=['GET', 'PATCH'], permission_classes=[permissions.IsAuthenticated])
+    # we make it atomic to prevent loss of suggestions on error
+    @transaction.atomic
+    def suggestions_for_type(self, request: Request, pk=None):
+        """
+        return a list of suggestions for a specific type on get
+        replaces the current list of suggestions for a specific type patch
+        """
+        if request.method == 'GET':
+            suggestions = models.Suggestion.objects.filter(
+                suggestion_for__pk=pk)
+            serializer = serializers.SuggestionSerializer(
+                suggestions, many=True)
+            return Response(serializer.data)
+        else:
+            data = request.data
+            data = list(map(lambda x: {**x, "suggestion_for": pk}, data))
+            models.Suggestion.objects.filter(suggestion_for__pk=pk).delete()
+            serializer = serializers.SuggestionSerializer(data=data, many=True)
+            serializer.is_valid(raise_exception=True)
+            # check for duplicates and error if one exists
+            seen = set()
+            for sugg in serializer.data:
+                if sugg['suggestion'] in seen:
+                    raise serializers.serializers.ValidationError(
+                        "Duplicated suggestion")
+                seen.add(sugg['suggestion'])
+
+            data = serializer.save()
+            return Response(serializers.SuggestionSerializer(data, many=True).data)
+
     @action(detail=True, url_path="duration", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
     def max_duration(self, request: Request, pk=None):
         """
@@ -343,6 +376,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
     serializer_class = ReservationSerializer
     # TODO assign rights
     permission_classes = [permissions.AllowAny]
+
     def get_serializer_class(self):
         return serializers.ReservationAdminSerializer if self.request.user.is_staff else serializers.ReservationSerializer
 
@@ -351,9 +385,11 @@ class ReservationViewSet(viewsets.ModelViewSet):
         getdict = self.request.GET
         if 'reserved_from' in getdict:
             # we fetch all starting after that
-            queryset = queryset.filter(reserved_from__gte=getdict['reserved_from'])
+            queryset = queryset.filter(
+                reserved_from__gte=getdict['reserved_from'])
         if 'reserved_until' in getdict:
-            queryset = queryset.filter(reserved_from__lte=getdict['reserved_until'])
+            queryset = queryset.filter(
+                reserved_from__lte=getdict['reserved_until'])
         if 'open' in getdict:
             if getdict['open'] in ['true', 'True']:
                 # remove all reservations that already got a corresponding rental
@@ -387,7 +423,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
             name='reservation_cancel_mail').first().content)
         message = template.render(Context(template_data))
         send_mail(subject="Deine Reservierung", message=message, html_message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[reservation.reserver.user.email])
+                  from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[reservation.reserver.user.email])
 
         return Response(serializer.data)
 
@@ -480,23 +516,26 @@ class RentalViewSet(viewsets.ModelViewSet):
 
         if "self" in self.request.GET and self.request.GET["self"] in ["true", "True"]:
             # query only own rentals (necessary for users without special rights)
-            queryset = queryset.filter(reservation__reserver=self.request.user.profile)
+            queryset = queryset.filter(
+                reservation__reserver=self.request.user.profile)
         return queryset
 
     @ action(detail=True, methods=['POST'], url_path="extend", permission_classes=[permissions.IsAuthenticated])
-    def extend_rental(self,request:Request, pk=None):
+    def extend_rental(self, request: Request, pk=None):
         rental = models.Rental.objects.get(pk=pk)
-        serializer = serializers.RentalSerializer(rental, context={'request': request})
+        serializer = serializers.RentalSerializer(
+            rental, context={'request': request})
         if serializer.data['extendable']:
             daydiff = (rental.reserved_until-timezone.now().date()).days
-            if (not request.user.is_staff) and (daydiff>=2 or daydiff<0):
+            if (not request.user.is_staff) and (daydiff >= 2 or daydiff < 0):
                 return Response(f"Daydiff = {daydiff}, only 1 and 2 are possible values", status=status.HTTP_400_BAD_REQUEST)
-            elif (daydiff>=9 or daydiff<0):
+            elif (daydiff >= 9 or daydiff < 0):
                 return Response(f"Daydiff = {daydiff}, only values between 9 and 1 are possible values", status=status.HTTP_400_BAD_REQUEST)
             else:
                 rental.reserved_until += timedelta(weeks=1)
                 rental.save()
-                serializer = serializers.RentalSerializer(rental, context={'request': request})
+                serializer = serializers.RentalSerializer(
+                    rental, context={'request': request})
                 return Response(serializer.data)
         else:
             return Response("nicht erweiterbar", status=status.HTTP_400_BAD_REQUEST)
