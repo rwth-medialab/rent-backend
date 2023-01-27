@@ -26,7 +26,6 @@ from rest_framework.decorators import api_view, action, authentication_classes, 
 from knox.views import LoginView as KnoxLoginView
 from knox.auth import TokenAuthentication
 
-
 from .serializers import ObjectTypeInfoSerializer, CategorySerializer, UserSerializer, RentalObjectSerializer, UserCreationSerializer, GroupSerializer, KnowLoginUserSerializer, RentalObjectTypeSerializer, ReservationSerializer, RentalSerializer, TagSerializer, TextSerializer
 from .permissions import UserPermission, GroupPermission
 from api import serializers
@@ -223,7 +222,7 @@ class UserViewSet(viewsets.ModelViewSet):
         message = template.render(Context(templateData))
 
         # TODO validate if mail has been send
-        send_mail(subject="Registrierung", message=message,
+        send_mail(subject="Registrierung", message=message,html_message=message,
                   from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[templateData['email']])
         return Response(data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -422,7 +421,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
         template = Template(models.Text.objects.filter(
             name='reservation_cancel_mail').first().content)
         message = template.render(Context(template_data))
-        send_mail(subject="Deine Reservierung", message=message, html_message=message,
+        send_mail(subject="Stornierung deiner Reservierung", message=message, html_message=message,
                   from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[reservation.reserver.user.email])
 
         return Response(serializer.data)
@@ -522,6 +521,9 @@ class RentalViewSet(viewsets.ModelViewSet):
 
     @ action(detail=True, methods=['POST'], url_path="extend", permission_classes=[permissions.IsAuthenticated])
     def extend_rental(self, request: Request, pk=None):
+        """
+        extends the rental by one week
+        """
         rental = models.Rental.objects.get(pk=pk)
         serializer = serializers.RentalSerializer(
             rental, context={'request': request})
@@ -533,6 +535,7 @@ class RentalViewSet(viewsets.ModelViewSet):
                 return Response(f"Daydiff = {daydiff}, only values between 9 and 1 are possible values", status=status.HTTP_400_BAD_REQUEST)
             else:
                 rental.reserved_until += timedelta(weeks=1)
+                rental.notified = None
                 rental.save()
                 serializer = serializers.RentalSerializer(
                     rental, context={'request': request})

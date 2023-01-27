@@ -12,3 +12,5 @@ Authlib>=1.2.0, <2
 django-extensions
 pydotplus
 requests
+celery[redis]
+django_celery_beat

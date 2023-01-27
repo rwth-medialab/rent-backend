@@ -235,7 +235,7 @@ class ReservationSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Reservation
         #fields = '__all__'
-        exclude = ['reserver']
+        exclude = ['reserver', 'notified']
 
     def get_fullfilled(self, obj):
         return obj.rental_set.all().count() > 0

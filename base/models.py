@@ -235,6 +235,7 @@ class Reservation(models.Model):
     operation_number = models.BigIntegerField()
     count = models.PositiveSmallIntegerField()
     canceled = models.DateTimeField(null=True, blank=True, default=None)
+    notified = models.DateTimeField(null=True, blank=True, default=None)
 
     def __str__(self) -> str:
         return 'reservation: ' + str(self.operation_number)
@@ -259,6 +260,7 @@ class Rental(models.Model):
     received_back_at = models.DateTimeField(
         null=True, default=None, blank=True)
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
+    notified = models.DateTimeField(null=True, blank=True, default=None)
     # we need the additional field to allow single device rental extensions
     reserved_until = models.DateField()
 

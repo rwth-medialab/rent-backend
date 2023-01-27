@@ -30,8 +30,7 @@ SECRET_KEY = str(os.environ.get('DJANGO_SECRET_KEY'))
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = list(map(lambda x: x.replace(
-    'https://', '').replace('http://', ''), str(os.environ.get('API_HOST')).split(',')))
+ALLOWED_HOSTS = [ str(os.environ.get('BACKEND_HOST')) ]
 
 LOGGING = {
     'version': 1,
@@ -63,7 +62,8 @@ INSTALLED_APPS = [
     'corsheaders',
     # cleans /media on deletion of database related files
     'django_cleanup.apps.CleanupConfig',
-    'django_extensions'
+    'django_extensions',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -185,7 +185,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-CORS_ALLOWED_ORIGINS = str(os.environ.get('FRONTEND_HOST')).split(',')
+CORS_ALLOWED_ORIGINS = list(map(lambda x: x if (x.startswith('http://') or x.startswith('https://')) else "https://"+x,str(os.environ.get('FRONTEND_HOST')).split(',')))
 FRONTEND_HOST = str(os.environ.get('FRONTEND_HOST')) if str(os.environ.get(
     'FRONTEND_HOST')).endswith("/") else str(os.environ.get('FRONTEND_HOST'))+"/"
 
@@ -207,6 +207,7 @@ EMAIL_PORT = str(os.environ.get('EMAIL_PORT'))
 EMAIL_USE_TLS = str(os.environ.get('EMAIL_USE_TLS')).lower() == "true"
 EMAIL_USE_SSL = str(os.environ.get('EMAIL_USE_SSL')).lower() == "true"
 DEFAULT_FROM_EMAIL = str(os.environ.get('DEFAULT_FROM_EMAIL'))
+DEFAULT_NOTIFICATION_EMAIL = str(os.environ.get('DEFAULT_NOTIFICATION_EMAIL'))
 
 
 # Settings for appointments
@@ -223,3 +224,7 @@ diff_in_days = 0
 DEFAULT_OFFSET_BETWEEN_RENTALS = timedelta(days=diff_in_days)
 
 EMAIL_VALIDATION_REGEX = '\\S+@([a-zA-Z0-9]+\\.)?rwth-aachen\\.de'
+
+# celery broker and result
+CELERY_BROKER_URL = os.environ.get("BROKER_URL", "redis://redis:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get("RESULT_BACKEND", "redis://redis:6379/0")

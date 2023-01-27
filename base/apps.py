@@ -7,6 +7,8 @@ class BaseConfig(AppConfig):
     name = 'base'
 
     def ready(self) -> None:
+        from django_celery_beat.models import PeriodicTask
+        from django_celery_beat.models import IntervalSchedule
         from .signals import populate_models
         post_migrate.connect(populate_models, sender=self)
         
@@ -58,3 +60,9 @@ class BaseConfig(AppConfig):
         if not models.Text.objects.filter(name='signup_mail').exists():
             models.Text.objects.create(
                 name='signup_mail', content=r"Hallo {{first_name}}, bitte aktiviere dein Konto unter {{validation_link}}")
+    
+        if not PeriodicTask.objects.filter(task="base.tasks.notify_about_rentals_and_reservations").exists():
+            PeriodicTask.objects.create(name="Send Notifications about rentals and reservations", task="base.tasks.notify_about_rentals_and_reservations", args=[], kwargs={}, enabled=True, interval_id=IntervalSchedule.objects.get_or_create(every=30, period="minutes")[0].pk)
+
+        if not PeriodicTask.objects.filter(task="base.tasks.cleanup_accounts").exists():
+            PeriodicTask.objects.create(name="Delete created, but never activated accounts", task="base.tasks.cleanup_accounts", args=[], kwargs={}, enabled=True, interval_id=IntervalSchedule.objects.get_or_create(every=1, period="days")[0].pk)
