@@ -697,3 +697,7 @@ class FilesViewSet(viewsets.ModelViewSet):
         instance = self.queryset.filter(name=request.GET['name']).first()
         file = instance.file.open()
         return HttpResponse(file, content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+class ProfileViewSet(viewsets.ModelViewSet):
+    queryset = models.Profile.objects.all()
+    serializer_class = serializers.ProfileSerializer
