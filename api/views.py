@@ -462,7 +462,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
             else:
                 count = reservation['count']
                 reservation = models.Reservation.objects.get(
-                    reserved_from=reservation["reserved_from"], reserved_until=reservation["reserved_until"], objecttype=reservation["objecttype"], reserver=request.user.profile.pk)
+                    reserved_from=reservation["reserved_from"], reserved_until=reservation["reserved_until"], objecttype=reservation["objecttype"], reserver=request.user.profile.pk, canceled__isnull=True)
                 reservation.count += count
                 reservation.save()
                 serializer = serializers.BulkReservationSerializer(reservation)
