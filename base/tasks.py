@@ -95,7 +95,6 @@ def notify_about_rentals_and_reservations():
                 logger.info(message)
             rentals.update(notified=timezone.now())
     # only execute if returning hours are over
-    logger.info(timezone.now() > timezone.now().replace(hour=int(models.Settings.objects.get(type='returning_end_hour').value), minute=0, second=0))
     if timezone.now() > timezone.now().replace(hour=int(models.Settings.objects.get(type='returning_end_hour').value), minute=0, second=0):
         # reuse notified state for this fetch all rentals that were supposed to come back today and which have been notified about reserved until before the rental hour startet
         rentals_not_received_back = models.Rental.objects.filter(reserved_until=datetime.now().date() ,received_back_at__isnull=True, notified__lte=timezone.now(

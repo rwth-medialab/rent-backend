@@ -333,3 +333,60 @@ class SuggestionSerializer(serializers.ModelSerializer):
                 message="you can not have the same combination of suggestion an suggestion twice"
             ),
         ]
+
+class OnPremiseWorkplaceStatusSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
+    class Meta: 
+        model = models.OnPremiseWorkplaceStatus
+        #fields = '__all__'
+        exclude = ['workplace']
+        include = ['id']
+
+
+class OnPremiseWorkplaceSerializer(serializers.ModelSerializer):
+    status = OnPremiseWorkplaceStatusSerializer(many=True)
+    image = serializers.ImageField(required=False)
+    class Meta:
+        model = models.OnPremiseWorkplace
+        fields = '__all__'
+        include = ['status']
+
+    def create(self, validated_data):
+        status = validated_data.pop('status')
+        exclusions = validated_data.pop('exclusions')
+        workplace = models.OnPremiseWorkplace.objects.create(**validated_data)
+        for stat in status:
+            models.OnPremiseWorkplaceStatus.objects.create(workplace_id=workplace.pk, **stat)
+        for exclusion in exclusions:
+            workplace.exclusions.add(exclusion)
+        return workplace
+
+    def update(self, instance:models.OnPremiseWorkplace, validated_data):
+        status = validated_data.pop('status')
+        #workplace = models.OnPremiseWorkplace.objects.get(pk=validated_data['id'])
+        for stat in status:
+            if 'id' in stat:
+                stat_mod = models.OnPremiseWorkplaceStatus.objects.filter(pk=stat['id'])
+                stat_mod.update(**stat)
+            else:
+                stat_mod = models.OnPremiseWorkplaceStatus.objects.create(**stat, workplace_id=instance.pk)
+                instance.status.add(stat_mod)
+                instance.save()
+        if 'exclusions' in validated_data:
+            exclusions = validated_data.pop('exclusions')
+            instance.exclusions.set(exclusions)
+            instance.save()
+        instance.refresh_from_db()
+        return instance
+
+class OnPremiseBookingSerializer(serializers.ModelSerializer):
+    userobj = UserSerializer(read_only=True, required=False, source="user")
+    class Meta:
+        model = models.OnPremiseBooking
+        fields = '__all__'
+        include = ['userobj']
+
+class OnPremiseBlockedTimesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.OnPremiseBlockedTimes
+        fields = '__all__'

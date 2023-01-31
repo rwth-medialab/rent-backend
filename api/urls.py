@@ -19,6 +19,9 @@ router.register(r'duration', views.MaxRentDurationViewSet)
 router.register(r'priority', views.PriorityViewSet)
 router.register(r'files', views.FilesViewSet)
 router.register(r'profile', views.ProfileViewSet)
+router.register(r'workplace', views.OnPremiseWorkplaceViewSet)
+router.register(r'onpremisebooking', views.OnPremiseBookingViewSet)
+router.register(r'onpremiseblockedtimes', views.OnPremiseBlockedTimesViewSet)
 
 urlpatterns = [
     path(r'auth/login/', LoginView.as_view(), name='knox_login'),

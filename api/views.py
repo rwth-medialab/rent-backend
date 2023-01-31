@@ -83,6 +83,10 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path="oauth/verify", permission_classes=[permissions.IsAuthenticated])
     def verify_with_oauth(self, request: Request):
+        """
+        if no verification process has been startet yet, fetch user and device code from the endpoint and return the verification url for the user. 
+        please call /api/users/oauth/token to check if the user already finished the process
+        """
         process = models.OauthVerificationProcess.objects.filter(
             user=request.user)
         if len(process) > 0:
@@ -222,7 +226,7 @@ class UserViewSet(viewsets.ModelViewSet):
         message = template.render(Context(templateData))
 
         # TODO validate if mail has been send
-        send_mail(subject="Registrierung", message=message,html_message=message,
+        send_mail(subject="Registrierung", message=message, html_message=message,
                   from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[templateData['email']])
         return Response(data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -698,6 +702,111 @@ class FilesViewSet(viewsets.ModelViewSet):
         file = instance.file.open()
         return HttpResponse(file, content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
+
 class ProfileViewSet(viewsets.ModelViewSet):
     queryset = models.Profile.objects.all()
     serializer_class = serializers.ProfileSerializer
+
+
+class OnPremiseWorkplaceViewSet(viewsets.ModelViewSet):
+    queryset = models.OnPremiseWorkplace.objects.all()
+    serializer_class = serializers.OnPremiseWorkplaceSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        logger.info(self.request.GET)
+        if 'displayed' in self.request.GET:
+            if self.request.GET['displayed'] in ['True', 'true']:
+                queryset = queryset.filter(displayed=True)
+
+        return queryset
+
+    @action(detail=True, url_path="slots", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
+    def get_slots(self, request: Request, pk=None):
+        """
+        return all Timeslots which are bookable [{start: time, end:time, weekday: int, date:date ,disabled: bool}]
+        """
+        weekdays = models.Settings.objects.get(
+            type='onpremise_weekdays').value.replace(' ', '').split(',')
+        temp = models.Settings.objects.get(
+            type='onpremise_starttime').value.replace(' ', '').split(':')
+        onpremise_start_hour = int(temp[0])
+        onpremise_start_min = int(temp[1] if len(temp) > 1 else 0)
+        temp = models.Settings.objects.get(
+            type='onpremise_endtime').value.replace(' ', '').split(':')
+        onpremise_end_hour = int(temp[0])
+        onpremise_end_min = int(temp[1] if len(temp) > 1 else 0)
+        onpremise_break = timedelta(minutes=int(models.Settings.objects.get(
+            type='onpremise_breakinbetween_in_min').value.replace(' ', '')))
+        onpremise_date_range = int(models.Settings.objects.get(
+            type='onpremise_date_range_in_days').value.replace(' ', ''))
+        duration = timedelta(minutes=int(models.Settings.objects.get(
+            type='onepremise_slotduration').value.replace(' ', '')))
+        ret = []
+        excluded_workplaces = models.OnPremiseWorkplace.objects.get(
+            pk=pk).exclusions.all()
+        for diff in range(onpremise_date_range):
+            delta = timedelta(days=diff)
+            now = timezone.now().astimezone(tz=timezone.get_default_timezone())
+            slot_day = now + delta
+            if str(slot_day.isoweekday()) not in weekdays:
+                continue
+
+            init_start_hour = onpremise_start_hour
+            init_start_min = onpremise_start_min
+            start = slot_day.replace(
+                hour=init_start_hour, minute=init_start_min, second=0, microsecond=0)
+            while (start + duration <= slot_day.replace(hour=onpremise_end_hour, minute=onpremise_end_min, second=0, microsecond=0)):
+                slot_start = start
+                slot_end = start + duration
+                # fetch all bookings in the slot that are not canceled
+                bookings = models.OnPremiseBooking.objects.filter(
+                    slot_start__lte=slot_end, slot_end__gte=slot_start, workplace_id=pk, canceled__isnull=True)
+                # general disabled time
+                blocked = models.OnPremiseBlockedTimes.objects.filter(
+                    starttime__lte=slot_end, endtime__gte=slot_start)
+                # fetch status
+                status = models.OnPremiseWorkplaceStatus.objects.filter(
+                    from_date__lte=slot_end, until_date__gte=slot_start, workplace_id=pk)
+                exclusion_bookings = models.OnPremiseBooking.objects.filter(
+                    workplace__in=excluded_workplaces, slot_start__lte=slot_end, slot_end__gte=slot_start)
+                ret.append({'start': slot_start, 'end': slot_end, 'weekday': slot_day.weekday(), 'date': start.date(
+                ), 'disabled': (bookings.count() != 0 or status.count() != 0 or blocked.count() != 0 or exclusion_bookings.count() != 0)})
+                start = slot_end + onpremise_break
+
+        return Response(ret)
+
+
+class OnPremiseBookingViewSet(viewsets.ModelViewSet):
+    queryset = models.OnPremiseBooking.objects.all()
+    serializer_class = serializers.OnPremiseBookingSerializer
+
+    @action(detail=True, url_path="cancel", methods=['POST'], permission_classes=[permissions.IsAuthenticated])
+    def cancel_onpremise_booking(self, request: Request, pk=None):
+        booking = models.OnPremiseBooking.objects.get(pk=pk)
+        booking.canceled = timezone.now()
+        booking.save()
+        serializer = serializers.OnPremiseBookingSerializer(booking,context={'request': request})
+        return Response(serializer.data)
+
+    def get_queryset(self):
+        queryset = self.queryset
+        querydict = self.request.GET
+        if 'self' in querydict:
+            if querydict['self'] in ['True', 'true']:
+                queryset = queryset.filter(user=self.request.user)
+        if 'from_date' in querydict:
+            queryset = queryset.filter(slot_start__date__gte=datetime.strptime(
+                querydict['from_date'], '%Y-%m-%d').date())
+        if 'until_date' in querydict:
+            queryset = queryset.filter(slot_start__date__lte=datetime.strptime(
+                querydict['until_date'], '%Y-%m-%d').date())
+        if 'canceled' in querydict:
+            if querydict['canceled'] in ['False', 'false']:
+                queryset = queryset.filter(canceled__isnull=True)
+        return queryset
+
+
+class OnPremiseBlockedTimesViewSet(viewsets.ModelViewSet):
+    queryset = models.OnPremiseBlockedTimes.objects.all()
+    serializer_class = serializers.OnPremiseBlockedTimesSerializer

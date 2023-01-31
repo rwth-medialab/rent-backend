@@ -267,13 +267,6 @@ class Rental(models.Model):
     def __str__(self) -> str:
         return 'Rental: ' + str(self.rental_number)
 
-
-class OnPremiseTimeSlot(models.Model):
-    day = models.SmallIntegerField()
-    start_time = models.TimeField()
-    duration = models.DurationField()
-
-
 class OnPremiseBlockedTimes(models.Model):
     """
     To block specific days e.g. someone is ill
@@ -282,12 +275,45 @@ class OnPremiseBlockedTimes(models.Model):
     endtime = models.DateTimeField(default=None, null=False)
 
 
-class OnPremiseBooking(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    showed_up = models.BooleanField()
-    start_datetime = models.DateTimeField()
-    duration = models.DurationField()
+class OnPremiseWorkplace(models.Model):
+    """
+    Workplace on premise, maybe create many to many relationship to objects(For objects that can be used on premise)
+    """
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    displayed = models.BooleanField(default=True)
+    image = models.ImageField(default='nopicture.png')
+    exclusions = models.ManyToManyField('OnPremiseWorkplace', blank=True)
+    #suggested_types = models.ManyToManyField(RentalObjectType)
 
+
+class OnPremiseBooking(models.Model):
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                name='booking',
+                fields=['workplace', 'slot_start', 'slot_end']
+            )
+        ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    showed_up = models.BooleanField(blank=True, default=False)
+    workplace = models.ForeignKey(OnPremiseWorkplace, on_delete=models.CASCADE)
+    slot_start = models.DateTimeField()
+    slot_end = models.DateTimeField()
+    comment = models.TextField(blank=True, default="")
+    canceled = models.DateTimeField(blank=True, default=None, null=True)
+    #needed_types = models.ManyToManyField(RentalObjectType)
+
+
+class OnPremiseWorkplaceStatus(models.Model):
+    """
+    Disable workplace for a Period of time
+    """
+    workplace = models.ForeignKey(OnPremiseWorkplace, on_delete=models.CASCADE, related_name="status")
+    from_date = models.DateTimeField()
+    until_date = models.DateTimeField()
+    reason = models.TextField()
+    
 
 class Notification(models.Model):
     """
