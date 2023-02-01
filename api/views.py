@@ -1,7 +1,7 @@
 import hashlib
 from datetime import datetime, timedelta
 from django.contrib.auth import login
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User, Group, Permission
 from django.conf import settings
 from django.core.mail import send_mail
 from django.template import Context, Template
@@ -81,6 +81,24 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [UserPermission]
 
+    @action(detail=True, methods=['post'], url_path="toggle_permission", permission_classes=[permissions.IsAdminUser])
+    def toggle_permission(self, request:Request, pk=None):
+        user = User.objects.get(pk=pk)
+        if 'permission' in request.data:
+            permission_whitelist = ['lending_access', 'inventory_editing']
+            if request.data['permission'] in permission_whitelist:
+                permission = Permission.objects.get(codename__contains=request.data['permission'])
+                if user.user_permissions.contains(permission):
+                    user.user_permissions.remove(permission)
+                else:
+                    user.user_permissions.add(permission)
+                #user.user_permissions.add(permission)
+
+        else:
+            return Response("missing permission param", status=status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        return Response(self.get_serializer_class()(user).data)
+
     @action(detail=False, methods=['post'], url_path="oauth/verify", permission_classes=[permissions.IsAuthenticated])
     def verify_with_oauth(self, request: Request):
         """
@@ -104,7 +122,7 @@ class UserViewSet(viewsets.ModelViewSet):
         rsp = rsp.json()
         device_code = rsp['device_code']
         user_code = rsp['user_code']
-        url = settings.OAUTH_CLIENTS['oauth']['verification_url'] + user_code
+        url = settings.OAUTH_CLIENTS['oauth']['OAUTH_VERIFICATION_URL'] + user_code
         verifaction_process = models.OauthVerificationProcess.objects.create(
             device_code=device_code,
             user_code=user_code,
@@ -513,7 +531,7 @@ class RentalViewSet(viewsets.ModelViewSet):
         if self.request.user.is_staff:
             queryset = queryset
         else:
-            queryset = queryset.filter(reservation__reserver=self.request.user)
+            queryset = queryset.filter(reservation__reserver=self.request.user.profile)
         if "open" in self.request.GET and self.request.GET["open"] in ["true", "True"]:
             queryset = queryset.filter(received_back_at__isnull=True)
 

@@ -35,7 +35,8 @@ def cleanup_accounts():
     users = User.objects.filter(last_login__isnull=True, date_joined__lte=timezone.now(
     ) - timedelta(weeks=2), is_active=False)
     result, _ = users.delete()
-    return f"deleted {result} accounts"
+    # 23 need to divide it by 2 because profiles also count against the count
+    return f"deleted {result/2} accounts"
 
 
 @shared_task()

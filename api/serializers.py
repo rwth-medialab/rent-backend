@@ -56,7 +56,6 @@ class PrioritySerializer(serializers.ModelSerializer):
 
 class ProfileSerializer(serializers.ModelSerializer):
     prio = PrioritySerializer(required=False)
-
     class Meta:
         model = Profile
         fields = '__all__'
@@ -137,9 +136,23 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
+    profiledata = ProfileSerializer(required=False, read_only=True, source='profile')
+    has_lending_rights = serializers.SerializerMethodField(required=False, read_only=True)
     class Meta:
         model = User
         exclude = ['password']
+        include = ['profiledata']
+
+    def get_has_lending_rights(self,obj:User)->bool:
+        ret = False
+        
+        for permission in obj.get_user_permissions():
+            if 'lending_access' in permission:
+                logger.info(permission)
+                ret = True
+        logger.info(ret)
+        return ret
+
 
 
 class KnowLoginUserSerializer(serializers.ModelSerializer):
