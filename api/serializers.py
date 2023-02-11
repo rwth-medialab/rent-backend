@@ -9,7 +9,7 @@ from django.conf import settings
 from django.db.models import Q
 import logging
 import re
-from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, ObjectTypeInfo, Text, Profile
+from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, Text, Profile
 from base import models
 from datetime import timedelta, datetime
 
@@ -308,12 +308,6 @@ class RentalCreateSerializer(serializers.ModelSerializer):
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
-        fields = '__all__'
-
-
-class ObjectTypeInfoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ObjectTypeInfo
         fields = '__all__'
 
 

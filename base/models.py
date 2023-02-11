@@ -165,17 +165,6 @@ class RentalObjectType(models.Model):
         return instance
 
 
-class ObjectTypeInfo(models.Model):
-    """
-    to show public information about an objectType
-    """
-    object_type = models.ForeignKey(RentalObjectType, on_delete=models.CASCADE)
-    # infotype e.g. Warning danger (everything that works with material)
-    type = models.CharField(max_length=20, verbose_name='material type')
-    public = models.BooleanField()
-    order = models.IntegerField()
-    content = models.TextField()
-
 
 class RentalObject(models.Model):
     class Meta:
@@ -308,18 +297,6 @@ class OnPremiseWorkplaceStatus(models.Model):
     reason = models.TextField()
     
 
-class Notification(models.Model):
-    """
-    for planned notificaitons
-    """
-    type = models.CharField(max_length=100, default='email')
-    receiver = models.CharField(max_length=255)
-    subject = models.CharField(max_length=255)
-    content = models.TextField()
-    added_at = models.DateTimeField(auto_now_add=True)
-    sent_at = models.DateTimeField(null=True)
-    send_at = models.DateTimeField(default=timezone.now)
-
 
 class Settings(models.Model):
     """
@@ -404,3 +381,16 @@ class OauthVerificationProcess(models.Model):
     access_token_exipiry = models.DateTimeField(null=True, blank=True, default=None)
     refresh_token = models.CharField(max_length=130, null=True, blank=True)
     faculty = models.CharField(max_length=100)
+
+
+# class Notification(models.Model):
+#     """
+#     for planned notificaitons
+#     """
+#     type = models.CharField(max_length=100, default='email')
+#     receiver = models.CharField(max_length=255)
+#     subject = models.CharField(max_length=255)
+#     content = models.TextField()
+#     added_at = models.DateTimeField(auto_now_add=True)
+#     sent_at = models.DateTimeField(null=True)
+#     send_at = models.DateTimeField(default=timezone.now)

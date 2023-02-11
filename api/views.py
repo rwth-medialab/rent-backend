@@ -26,11 +26,11 @@ from rest_framework.decorators import api_view, action, authentication_classes, 
 from knox.views import LoginView as KnoxLoginView
 from knox.auth import TokenAuthentication
 
-from .serializers import ObjectTypeInfoSerializer, CategorySerializer, UserSerializer, RentalObjectSerializer, UserCreationSerializer, GroupSerializer, KnowLoginUserSerializer, RentalObjectTypeSerializer, ReservationSerializer, RentalSerializer, TagSerializer, TextSerializer
+from .serializers import CategorySerializer, UserSerializer, RentalObjectSerializer, UserCreationSerializer, GroupSerializer, KnowLoginUserSerializer, RentalObjectTypeSerializer, ReservationSerializer, RentalSerializer, TagSerializer, TextSerializer
 from .permissions import UserPermission, GroupPermission
 from api import serializers
 
-from base.models import RentalObject, RentalObjectType, Category, Reservation, Rental, Profile, Tag, ObjectTypeInfo, Text
+from base.models import RentalObject, RentalObjectType, Category, Reservation, Rental, Profile, Tag, Text
 from base import models
 
 from docxtpl import DocxTemplate
@@ -633,24 +633,6 @@ class TagViewSet(viewsets.ModelViewSet):
     serializer_class = TagSerializer
     # TODO assign rights everyone list, retrieve, post patch and put only with permission and logged in
     permission_classes = [permissions.AllowAny]
-
-
-class ObjectTypeInfoViewSet(viewsets.ModelViewSet):
-    # TODO Permission that limits access to non Public objects
-    queryset = ObjectTypeInfo.objects.all()
-    serializer_class = ObjectTypeInfoSerializer
-
-    def get_queryset(self):
-        # get default queryset, now limit it...
-        queryset = super().get_queryset()
-        getdict = self.request.GET
-        if 'public' in getdict and getdict['public'] in ['True', 'true']:
-            queryset.filter(public=True)
-        elif 'public' in getdict:
-            queryset.filter(public=False)
-        if 'object_type' in getdict:
-            queryset.filter(object_type=int(getdict['object_type']))
-        return queryset
 
 
 class PriorityViewSet(viewsets.ModelViewSet):
