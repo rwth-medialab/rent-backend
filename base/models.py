@@ -288,13 +288,6 @@ class OnPremiseWorkplace(models.Model):
 
 
 class OnPremiseBooking(models.Model):
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                name='booking',
-                fields=['workplace', 'slot_start', 'slot_end']
-            )
-        ]
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     showed_up = models.BooleanField(blank=True, default=False)
     workplace = models.ForeignKey(OnPremiseWorkplace, on_delete=models.CASCADE)
