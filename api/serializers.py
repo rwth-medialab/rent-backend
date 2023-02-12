@@ -369,20 +369,21 @@ class OnPremiseWorkplaceSerializer(serializers.ModelSerializer):
         return workplace
 
     def update(self, instance:models.OnPremiseWorkplace, validated_data):
-        status = validated_data.pop('status')
-        #workplace = models.OnPremiseWorkplace.objects.get(pk=validated_data['id'])
-        for stat in status:
-            if 'id' in stat:
-                stat_mod = models.OnPremiseWorkplaceStatus.objects.filter(pk=stat['id'])
-                stat_mod.update(**stat)
-            else:
-                stat_mod = models.OnPremiseWorkplaceStatus.objects.create(**stat, workplace_id=instance.pk)
-                instance.status.add(stat_mod)
-                instance.save()
+        if 'status' in validated_data:
+            status = validated_data.pop('status')
+            for stat in status:
+                if 'id' in stat:
+                    stat_mod = models.OnPremiseWorkplaceStatus.objects.filter(pk=stat['id'])
+                    stat_mod.update(**stat)
+                else:
+                    stat_mod = models.OnPremiseWorkplaceStatus.objects.create(**stat, workplace_id=instance.pk)
+                    instance.status.add(stat_mod)
+                    instance.save()
         if 'exclusions' in validated_data:
             exclusions = validated_data.pop('exclusions')
             instance.exclusions.set(exclusions)
             instance.save()
+        models.OnPremiseWorkplace.objects.filter(pk=instance.pk).update(**validated_data)
         instance.refresh_from_db()
         return instance
 
