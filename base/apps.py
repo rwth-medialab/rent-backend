@@ -53,6 +53,39 @@ class BaseConfig(AppConfig):
             logger.info(f"creating email_validation_regex with {settings.EMAIL_VALIDATION_REGEX} in db")
             models.Settings.objects.create(type='email_validation_regex', value=settings.EMAIL_VALIDATION_REGEX, public=True)
 
+        if not models.Settings.objects.filter(type='onepremise_slotduration').exists():
+            logger.info(f"creating onepremise_slotduration with {90} in db")
+            models.Settings.objects.create(type='onepremise_slotduration', value='90', public=True)
+
+        if not models.Settings.objects.filter(type='onpremise_date_range_in_days').exists():
+            logger.info(f"creating onpremise_date_range_in_days with {7} in db")
+            models.Settings.objects.create(type='onpremise_date_range_in_days', value='7', public=True)
+        
+
+        if not models.Settings.objects.filter(type='onpremise_weekdays').exists():
+            logger.info(f"creating onpremise_weekdays with {'1,2,3,4,5'} in db")
+            models.Settings.objects.create(type='onpremise_weekdays', value='1,2,3,4,5', public=True)
+
+        if not models.Settings.objects.filter(type='onpremise_date_range_in_days').exists():
+            logger.info(f"creating onpremise_date_range_in_days with {7} in db")
+            models.Settings.objects.create(type='onpremise_date_range_in_days', value='7', public=True)
+
+        if not models.Settings.objects.filter(type='onpremise_activated').exists():
+            logger.info(f"creating onpremise_activated with {True} in db")
+            models.Settings.objects.create(type='onpremise_activated', value='True', public=True)
+
+        if not models.Settings.objects.filter(type='onpremise_breakinbetween_in_min').exists():
+            logger.info(f"creating onpremise_breakinbetween_in_min with {30} in db")
+            models.Settings.objects.create(type='onpremise_breakinbetween_in_min', value='30', public=True)
+
+        if not models.Settings.objects.filter(type='onpremise_endtime').exists():
+            logger.info(f"creating onpremise_endtime with {18} in db")
+            models.Settings.objects.create(type='onpremise_endtime', value='18', public=True)
+
+        if not models.Settings.objects.filter(type='onpremise_starttime').exists():
+            logger.info(f"creating onpremise_starttime with {'10:30'} in db")
+            models.Settings.objects.create(type='onpremise_starttime', value='10:30', public=True)
+
         """
         populate some defaults, for example the default priority class, or default texts
         """
