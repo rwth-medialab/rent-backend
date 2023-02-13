@@ -28,6 +28,7 @@ from knox.auth import TokenAuthentication
 
 from .serializers import CategorySerializer, UserSerializer, RentalObjectSerializer, UserCreationSerializer, GroupSerializer, KnowLoginUserSerializer, RentalObjectTypeSerializer, ReservationSerializer, RentalSerializer, TagSerializer, TextSerializer
 from .permissions import UserPermission, GroupPermission
+from api import permissions as customPermissions
 from api import serializers
 
 from base.models import RentalObject, RentalObjectType, Category, Reservation, Rental, Profile, Tag, Text
@@ -81,7 +82,7 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [UserPermission]
 
-    @action(detail=True, methods=['post'], url_path="toggle_permission", permission_classes=[permissions.IsAdminUser])
+    @action(detail=True, methods=['post'], url_path="toggle_permission", permission_classes=[customPermissions.UserPermission])
     def toggle_permission(self, request:Request, pk=None):
         user = User.objects.get(pk=pk)
         if 'permission' in request.data:
@@ -259,7 +260,7 @@ class RentalobjectViewSet(viewsets.ModelViewSet):
     queryset = RentalObject.objects.all().order_by('internal_identifier')
     serializer_class = RentalObjectSerializer
     # TODO assign rights
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [customPermissions.RentalObjectPermission]
 
     def get_queryset(self):
         queryset = RentalObject.objects.all()
@@ -277,7 +278,7 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
     # TODO Allow list all
     # TODO Allow retrieve all
     # TODO Allow update/partial inventory rights
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [customPermissions.RentalObjectTypePermission]
 
     # TODO add Permission for admin with inv rights
     @action(detail=True, url_path="suggestions", methods=['GET', 'PATCH'], permission_classes=[permissions.IsAuthenticated])
@@ -385,7 +386,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     # TODO assign rights
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [customPermissions.CategoryPermission]
 
 
 class ReservationViewSet(viewsets.ModelViewSet):
@@ -396,7 +397,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     # TODO assign rights
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [customPermissions.ReservationPermission]
 
     def get_serializer_class(self):
         return serializers.ReservationAdminSerializer if self.request.user.is_staff else serializers.ReservationSerializer
@@ -450,6 +451,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
     def bulk_create(self, request: Request):
+        """
+        create reservations from a list of reservation candidates
+        """
         data = request.data['data']
         if models.Reservation.objects.all().exists():
             operation_number = models.Reservation.objects.aggregate(
@@ -524,7 +528,7 @@ class RentalViewSet(viewsets.ModelViewSet):
     queryset = Rental.objects.all()
     serializer_class = RentalSerializer
     # TODO assign rights
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [customPermissions.RentalPermission]
 
     def get_queryset(self):
         queryset = models.Rental.objects.all()
@@ -617,8 +621,7 @@ class RentalViewSet(viewsets.ModelViewSet):
 class TextViewSet(viewsets.ModelViewSet):
     queryset = Text.objects.all()
     serializer_class = TextSerializer
-    # TODO assign rights
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [customPermissions.TextPermission]
 
     def get_queryset(self):
         queryset = Text.objects.all()
@@ -632,17 +635,19 @@ class TagViewSet(viewsets.ModelViewSet):
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
     # TODO assign rights everyone list, retrieve, post patch and put only with permission and logged in
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [customPermissions.TagPermission]
 
 
 class PriorityViewSet(viewsets.ModelViewSet):
     queryset = models.Priority.objects.all()
     serializer_class = serializers.PrioritySerializer
+    permission_classes = [customPermissions.PriorityPermission]
 
 
 class SettingsViewSet(viewsets.ModelViewSet):
     queryset = models.Settings.objects.filter(public=True)
     serializer_class = serializers.SettingsSerializer
+    permission_classes = [customPermissions.SettingsPermission]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -654,6 +659,7 @@ class SettingsViewSet(viewsets.ModelViewSet):
 class MaxRentDurationViewSet(viewsets.ModelViewSet):
     queryset = models.MaxRentDuration.objects.all()
     serializer_class = serializers.MaxRentDurationSerializer
+    permission_classes = [customPermissions.MaxRentDurationPermission]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -663,21 +669,10 @@ class MaxRentDurationViewSet(viewsets.ModelViewSet):
                 rental_object_type=getdict['object_type'])
         return queryset
 
-
-class PassthroughRenderer(renderers.BaseRenderer):
-    """
-        Return data as-is. View should supply a Response.
-    """
-    media_type = ''
-    format = ''
-
-    def render(self, data, accepted_media_type=None, renderer_context=None):
-        return data
-
-
 class FilesViewSet(viewsets.ModelViewSet):
     queryset = models.Files.objects.all()
     serializer_class = serializers.FilesSerializer
+    permission_classes = [customPermissions.FilesPermission]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -711,6 +706,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
 class OnPremiseWorkplaceViewSet(viewsets.ModelViewSet):
     queryset = models.OnPremiseWorkplace.objects.all()
     serializer_class = serializers.OnPremiseWorkplaceSerializer
+    permission_classes = [customPermissions.OnPremiseWorkplacePermission]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -780,6 +776,7 @@ class OnPremiseWorkplaceViewSet(viewsets.ModelViewSet):
 class OnPremiseBookingViewSet(viewsets.ModelViewSet):
     queryset = models.OnPremiseBooking.objects.all()
     serializer_class = serializers.OnPremiseBookingSerializer
+    permission_classes = [customPermissions.OnPremiseBookingPermission]
 
     @action(detail=True, url_path="cancel", methods=['POST'], permission_classes=[permissions.IsAuthenticated])
     def cancel_onpremise_booking(self, request: Request, pk=None):
@@ -810,3 +807,4 @@ class OnPremiseBookingViewSet(viewsets.ModelViewSet):
 class OnPremiseBlockedTimesViewSet(viewsets.ModelViewSet):
     queryset = models.OnPremiseBlockedTimes.objects.all()
     serializer_class = serializers.OnPremiseBlockedTimesSerializer
+    permission_classes = [customPermissions.OnPremiseBlockedTimesPermission]
