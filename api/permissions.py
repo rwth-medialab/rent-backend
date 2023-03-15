@@ -119,7 +119,7 @@ class ReservationPermission(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
             
-        if view.action in ['retrieve', 'bulk_create', 'cancel_reservation']:
+        if view.action in ['retrieve', 'bulk_create', 'cancel_reservation', 'list']:
             return True
         elif view.action in ['list', 'create', 'download_form']:
             return request.user.has_perm('base.lending_access')
@@ -128,7 +128,7 @@ class ReservationPermission(permissions.BasePermission):
         return False
         
     def has_object_permission(self, request:Request, view, obj:models.Reservation):
-        if view.action in ['cancel_reservation','retrieve']:
+        if view.action in ['cancel_reservation','retrieve', 'list']:
             return obj.reserver == request.user or request.user.has_perm('base.lending_access')
 
         return True
