@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.conf import settings
 from django.db.models import Q
+from django.forms import model_to_dict
 import logging
 import re
 from base.models import Category, RentalObject, RentalObjectType, Reservation, Rental, Tag, Text, Profile
@@ -34,7 +35,8 @@ class MaxRentDurationSerializer(serializers.ModelSerializer):
         """
         since parsing of the timedelta is tidious we add another field with the timedelta in days
         """
-        return int(obj.duration.days)
+        objdict = model_to_dict(obj)
+        return int(objdict['duration'].days)
 
     def create(self, validated_data):
         validated_data['duration'] = timedelta(
@@ -214,7 +216,7 @@ class BulkReservationSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
-        if models.RentalObjectType.max_rent_duration(pk=data['objecttype'].pk, prio=data['reserver'].prio).duration + timedelta(days=7) < data['reserved_until']-data['reserved_from']:
+        if model_to_dict(models.RentalObjectType.max_rent_duration(pk=data['objecttype'].pk, prio=data['reserver'].prio))['duration'] + timedelta(days=7) < data['reserved_until']-data['reserved_from']:
             raise serializers.ValidationError(
                 detail="the rent duration exceeds max_rent_duration.")
         if data['reserved_from'].isoweekday() != int(models.Settings.objects.get(type='lenting_day').value):
