@@ -13,6 +13,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.http import HttpResponse, FileResponse
 from django.shortcuts import redirect
+from django.db import IntegrityError
 import os
 
 from rest_framework import status
@@ -22,6 +23,8 @@ from rest_framework import permissions
 from rest_framework.authtoken.serializers import AuthTokenSerializer
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, action, authentication_classes, permission_classes
+from rest_framework.views import exception_handler
+
 
 from knox.views import LoginView as KnoxLoginView
 from knox.auth import TokenAuthentication
@@ -42,9 +45,27 @@ import requests
 # Allow to Login with Basic auth for testing purposes
 import logging
 import sys
+import re
 
 logger = logging.getLogger(name="django")
 
+def integrity_error_exception_handler(exc, context):
+    """
+    custom errorhandler. Translates e.g. internal model errors to correct statuscodes and errormessages. 
+    returns drf default errorresponse if it is a known error
+    returns a custom errorresponse if it is a unkown error
+    """
+    response = exception_handler(exc, context)
+
+    if isinstance(exc, IntegrityError) and not response:
+        # check if it is a key duplication error
+        matches = re.findall(r"Key \((.+)\)=\((.+)\) already exists",str(exc))
+        text = 'ein Datenbankobject mit diesem key existiert bereits'
+        if len(matches)==1 and len(matches[0])==2 and matches[0][0]=="prefix_identifier":
+            text = "Es wurde bereits ein Objekt mit dem Präfix Identifier: " + matches[0][1] + " erstellt. Bitte wähle einen anderen Präfix."
+        response = Response({'detail': text}, status=status.HTTP_400_BAD_REQUEST)
+
+    return response
 
 class LoginView(KnoxLoginView):
     """
@@ -274,10 +295,6 @@ class RentalobjectViewSet(viewsets.ModelViewSet):
 class RentalobjectTypeViewSet(viewsets.ModelViewSet):
     queryset = RentalObjectType.objects.all()
     serializer_class = RentalObjectTypeSerializer
-    # TODO assign rights
-    # TODO Allow list all
-    # TODO Allow retrieve all
-    # TODO Allow update/partial inventory rights
     permission_classes = [customPermissions.RentalObjectTypePermission]
 
     # TODO add Permission for admin with inv rights

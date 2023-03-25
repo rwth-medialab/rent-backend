@@ -28,7 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = str(os.environ.get('DJANGO_SECRET_KEY'))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = bool(os.environ.get('DEBUG', 'true' ))
 
 ALLOWED_HOSTS = [ str(os.environ.get('BACKEND_HOST')) ]
 
@@ -80,7 +80,9 @@ MIDDLEWARE = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'knox.auth.TokenAuthentication',
-    ]
+    ],
+    'EXCEPTION_HANDLER': 'api.views.integrity_error_exception_handler'
+
 }
 
 REST_KNOX = {
