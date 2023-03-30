@@ -28,7 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = str(os.environ.get('DJANGO_SECRET_KEY'))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = bool(os.environ.get('DEBUG', 'true' ))
+DEBUG = os.environ.get('DEBUG', 'true' ) in ['true', 'True', '1']
 
 ALLOWED_HOSTS = [ str(os.environ.get('BACKEND_HOST')) ]
 
@@ -177,15 +177,16 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/django-static/'
+STATIC_ROOT=os.path.join(BASE_DIR,'staticfiles')
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 CORS_ALLOWED_ORIGINS = list(map(lambda x: x if (x.startswith('http://') or x.startswith('https://')) else "https://"+x,str(os.environ.get('FRONTEND_HOST')).split(',')))
 FRONTEND_HOST = str(os.environ.get('FRONTEND_HOST')) if str(os.environ.get(
