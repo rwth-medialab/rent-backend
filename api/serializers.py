@@ -152,7 +152,6 @@ class AdminUserSerializer(serializers.ModelSerializer):
             if 'lending_access' in permission:
                 logger.info(permission)
                 ret = True
-        logger.info(ret)
         return ret
 
 
