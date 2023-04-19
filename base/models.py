@@ -269,7 +269,8 @@ class OnPremiseWorkplace(models.Model):
     Workplace on premise, maybe create many to many relationship to objects(For objects that can be used on premise)
     """
     name = models.CharField(max_length=100)
-    description = models.TextField()
+    description = models.TextField(default='')
+    shortdescription = models.TextField(default='')
     displayed = models.BooleanField(default=True)
     image = models.ImageField(default='nopicture.png')
     exclusions = models.ManyToManyField('OnPremiseWorkplace', blank=True)
