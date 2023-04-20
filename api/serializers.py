@@ -384,8 +384,9 @@ class OnPremiseWorkplaceSerializer(serializers.ModelSerializer):
             exclusions = validated_data.pop('exclusions')
             instance.exclusions.set(exclusions)
             instance.save()
-        models.OnPremiseWorkplace.objects.filter(pk=instance.pk).update(**validated_data)
-        instance.refresh_from_db()
+        instance = super().update(instance=instance, validated_data=validated_data)
+        # models.OnPremiseWorkplace.objects.filter(pk=instance.pk).update(**validated_data)
+        # instance.refresh_from_db()
         return instance
 
 class OnPremiseBookingSerializer(serializers.ModelSerializer):
