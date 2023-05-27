@@ -165,7 +165,7 @@ class KnowLoginUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['username', 'email', 'groups',
-                  'is_staff', 'is_superuser', 'user_permissions', 'profile']
+                  'is_staff', 'is_superuser', 'user_permissions', 'profile', 'id']
 
     def get_user_permissions_name(self, obj):
         # replace ids with Permission names to reduce the number of requests
