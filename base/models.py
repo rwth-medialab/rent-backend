@@ -346,6 +346,13 @@ class Suggestion(models.Model):
         RentalObjectType, on_delete=models.CASCADE, related_name='suggestion_for')
     description = models.TextField(verbose_name="Description, why is this a suggestion for the other one?", default="", blank=True)
 
+class PasswordReset(models.Model):
+    """
+    Saves the data for a password reset.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    hash = models.CharField(max_length=1024)
+    creation_date = models.DateTimeField(default=timezone.now)
 
 class MaxRentDuration(models.Model):
     class Meta:

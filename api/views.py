@@ -1,11 +1,12 @@
 import hashlib
+from django.utils.crypto import get_random_string
 from datetime import datetime, timedelta
 from django.contrib.auth import login
 from django.contrib.auth.models import User, Group, Permission
 from django.conf import settings
 from django.core.mail import send_mail
 from django.template import Context, Template
-from django.template.loader import get_template
+from django.template.loader import render_to_string
 from django.forms.models import model_to_dict
 from django.core.exceptions import FieldError
 from django.db.models import Max, Q, F
@@ -103,6 +104,46 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [UserPermission]
 
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
+    def passwordreset(self, request:Request):
+        if 'username' in request.data and 'email' in request.data:
+            usermodel = models.User.objects.filter(username=request.data['username'], email=request.data['email'])
+            if usermodel.count()==1:
+                print("Nutzer gefunden Resetlink wird generiert")
+                usermodel = usermodel[0]
+                hash = hashlib.sha256(
+                    (str(timezone.now()) + get_random_string(length=256)).encode("utf-8")).hexdigest()
+                print(hash)
+                models.PasswordReset.objects.create(user=usermodel, hash=hash)
+                link=settings.FRONTEND_HOST + 'account/passwordreset?hash='+ hash
+                email_text = render_to_string('passwordreset.html',{'link':link})
+                send_mail(subject="Passwordreset", message=email_text, html_message=email_text,
+                        from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[request.data['email']])
+            else:
+                print(f"Es wurden {usermodel.count()} Accounts zu den Daten Email: {request.data['username']} und Nutzername: {request.data['email']} gefunden. Daher kann kein Reset Link gesendet werden")
+        return Response(data={'abs':'abs'})
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
+    def passwordreset_confirm (self, request:Request):
+        print(request.data)
+        # check if a Passwordresetprozess for this hash exists
+        try:
+            reset_model = models.PasswordReset.objects.get(hash=request.data['hash'])
+        except:
+            return Response(data={'detail': "Kein Passwortresetprozess gefunden"}, status=status.HTTP_400_BAD_REQUEST)
+        # check if link is still valid
+        if reset_model.creation_date < timezone.now()-timedelta(days=1):
+            reset_model.delete()
+            return Response(data={'detail': "Passwortreset ist abgelaufen"}, status=status.HTTP_400_BAD_REQUEST)
+        password = request.data['password']
+        if len(password) < 8:
+            return Response(data={'detail': "Das Passwort entspricht nicht den Vorgaben"}, status=status.HTTP_400_BAD_REQUEST)
+        user_model = reset_model.user
+        user_model.set_password(password)
+        user_model.save()
+        reset_model.delete()
+        return Response("Das Passwort wurde erfolgreich geändert")
+    
     @action(detail=True, methods=['post'], url_path="toggle_permission", permission_classes=[customPermissions.UserPermission])
     def toggle_permission(self, request:Request, pk=None):
         user = User.objects.get(pk=pk)

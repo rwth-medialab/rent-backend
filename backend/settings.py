@@ -28,9 +28,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = str(os.environ.get('DJANGO_SECRET_KEY'))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'true' ) in ['true', 'True', '1']
+DEBUG = os.environ.get('DEBUG', 'true') in ['true', 'True', '1']
 
-ALLOWED_HOSTS = [ str(os.environ.get('BACKEND_HOST')) ]
+ALLOWED_HOSTS = [str(os.environ.get('BACKEND_HOST'))]
 
 LOGGING = {
     'version': 1,
@@ -95,11 +95,10 @@ REST_KNOX = {
 }
 
 ROOT_URLCONF = 'backend.urls'
-
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -118,7 +117,7 @@ OAUTH_CLIENTS = {
         'scope': os.environ.get('OAUTH_SCOPE'),
         'OAUTH_AUTHORIZATION_CODE_URL': os.environ.get('OAUTH_AUTHORIZATION_CODE_URL'),
         'OAUTH_ACCESS_TOKEN_URL': os.environ.get('OAUTH_ACCESS_TOKEN_URL'),
-        'OAUTH_VERIFICATION_URL':os.environ.get('OAUTH_VERIFICATION_URL'),
+        'OAUTH_VERIFICATION_URL': os.environ.get('OAUTH_VERIFICATION_URL'),
         'OAUTH_VERIFICATIONDATA_ENDPOINT': os.environ.get('OAUTH_VERIFICATIONDATA_ENDPOINT'),
         'OAUTH_DATA_KEY': os.environ.get('OAUTH_DATA_KEY'),
         'OAUTH_DATA_VALUE': os.environ.get('OAUTH_DATA_VALUE')
@@ -178,7 +177,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
 STATIC_URL = '/django-static/'
-STATIC_ROOT=os.path.join(BASE_DIR,'staticfiles')
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -188,7 +187,8 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOWED_ORIGINS = list(map(lambda x: x if (x.startswith('http://') or x.startswith('https://')) else "https://"+x,str(os.environ.get('FRONTEND_HOST')).split(',')))
+CORS_ALLOWED_ORIGINS = list(map(lambda x: x if (x.startswith('http://') or x.startswith(
+    'https://')) else "https://"+x, str(os.environ.get('FRONTEND_HOST')).split(',')))
 FRONTEND_HOST = str(os.environ.get('FRONTEND_HOST')) if str(os.environ.get(
     'FRONTEND_HOST')).endswith("/") else str(os.environ.get('FRONTEND_HOST'))+"/"
 
@@ -230,4 +230,5 @@ EMAIL_VALIDATION_REGEX = '\\S+@([a-zA-Z0-9]+\\.)?rwth-aachen\\.de'
 
 # celery broker and result
 CELERY_BROKER_URL = os.environ.get("BROKER_URL", "redis://redis:6379/0")
-CELERY_RESULT_BACKEND = os.environ.get("RESULT_BACKEND", "redis://redis:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get(
+    "RESULT_BACKEND", "redis://redis:6379/0")
