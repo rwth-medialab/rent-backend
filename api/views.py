@@ -52,7 +52,7 @@ logger = logging.getLogger(name="django")
 
 def integrity_error_exception_handler(exc, context):
     """
-    custom errorhandler. Translates e.g. internal model errors to correct statuscodes and errormessages. 
+    custom errorhandler. Translates e.g. internal model errors to correct statuscodes and errormessages.
     returns drf default errorresponse if it is a known error
     returns a custom errorresponse if it is a unkown error
     """
@@ -113,7 +113,6 @@ class UserViewSet(viewsets.ModelViewSet):
                 usermodel = usermodel[0]
                 hash = hashlib.sha256(
                     (str(timezone.now()) + get_random_string(length=256)).encode("utf-8")).hexdigest()
-                print(hash)
                 models.PasswordReset.objects.create(user=usermodel, hash=hash)
                 link=settings.FRONTEND_HOST + 'account/passwordreset?hash='+ hash
                 email_text = render_to_string('passwordreset.html',{'link':link})
@@ -125,7 +124,6 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def passwordreset_confirm (self, request:Request):
-        print(request.data)
         # check if a Passwordresetprozess for this hash exists
         try:
             reset_model = models.PasswordReset.objects.get(hash=request.data['hash'])
@@ -143,7 +141,7 @@ class UserViewSet(viewsets.ModelViewSet):
         user_model.save()
         reset_model.delete()
         return Response("Das Passwort wurde erfolgreich geändert")
-    
+
     @action(detail=True, methods=['post'], url_path="toggle_permission", permission_classes=[customPermissions.UserPermission])
     def toggle_permission(self, request:Request, pk=None):
         user = User.objects.get(pk=pk)
@@ -165,7 +163,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path="oauth/verify", permission_classes=[permissions.IsAuthenticated])
     def verify_with_oauth(self, request: Request):
         """
-        if no verification process has been startet yet, fetch user and device code from the endpoint and return the verification url for the user. 
+        if no verification process has been startet yet, fetch user and device code from the endpoint and return the verification url for the user.
         please call /api/users/oauth/token to check if the user already finished the process
         """
         process = models.OauthVerificationProcess.objects.filter(
