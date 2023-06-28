@@ -295,7 +295,11 @@ class UserViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         data = serializer.data
         data['password'] = ''
-        templateData = model_to_dict(User.objects.get(pk=data['id']))
+        user = User.objects.get(pk=data['id'])
+        if type(user) is not dict:
+            templateData = model_to_dict(user)
+        else:
+            templateData = user
         templateData['frontend_host'] = settings.FRONTEND_HOST
         templateData['hash'] = hashlib.sha256(
             (str(templateData["date_joined"]) + templateData["username"] + settings.EMAIL_VALIDATION_HASH_SALT).encode("utf-8")).hexdigest()

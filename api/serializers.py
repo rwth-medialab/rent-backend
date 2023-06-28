@@ -35,8 +35,9 @@ class MaxRentDurationSerializer(serializers.ModelSerializer):
         """
         since parsing of the timedelta is tidious we add another field with the timedelta in days
         """
-        objdict = model_to_dict(obj)
-        return int(objdict['duration'].days)
+        if type(obj) is not dict:
+            obj = model_to_dict(obj)
+        return int(obj['duration'].days)
 
     def create(self, validated_data):
         validated_data['duration'] = timedelta(
@@ -215,7 +216,8 @@ class BulkReservationSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
-        if model_to_dict(models.RentalObjectType.max_rent_duration(pk=data['objecttype'].pk, prio=data['reserver'].prio))['duration'] + timedelta(days=7) < data['reserved_until']-data['reserved_from']:
+        objectType = models.RentalObjectType.max_rent_duration(pk=data['objecttype'].pk, prio=data['reserver'].prio)
+        if type(objectType) is not dict and model_to_dict(objectType)['duration'] + timedelta(days=7) < data['reserved_until']-data['reserved_from']:
             raise serializers.ValidationError(
                 detail="the rent duration exceeds max_rent_duration.")
         if data['reserved_from'].isoweekday() != int(models.Settings.objects.get(type='lenting_day').value):
