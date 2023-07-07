@@ -606,6 +606,7 @@ class RentalViewSet(viewsets.ModelViewSet):
         return queryset
 
     @ action(detail=True, methods=['POST'], url_path="extend", permission_classes=[permissions.IsAuthenticated])
+    @transaction.atomic
     def extend_rental(self, request: Request, pk=None):
         """
         extends the rental by one week
@@ -620,6 +621,7 @@ class RentalViewSet(viewsets.ModelViewSet):
             elif (daydiff >= 9 or daydiff < 0):
                 return Response(f"Daydiff = {daydiff}, only values between 9 and 1 are possible values", status=status.HTTP_400_BAD_REQUEST)
             else:
+                models.Extension.objects.create(extended_by=request.user, extended_from=rental.reserved_until, extended_until=rental.reserved_until+timedelta(weeks=1), extended_rental=rental)
                 rental.reserved_until += timedelta(weeks=1)
                 rental.notified = None
                 rental.save()

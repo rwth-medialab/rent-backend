@@ -255,6 +255,16 @@ class Rental(models.Model):
 
     def __str__(self) -> str:
         return 'Rental: ' + str(self.rental_number)
+    
+class Extension(models.Model):
+    """
+    model to save extensions more verbose
+    """
+    extended_from = models.DateTimeField(default=None, null=False)
+    extended_until = models.DateTimeField(default=None, null=False)
+    extended_at = models.DateTimeField(default=timezone.now, null=False)
+    extended_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    extended_rental = models.ForeignKey(Rental, on_delete=models.CASCADE)
 
 class OnPremiseBlockedTimes(models.Model):
     """
