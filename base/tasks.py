@@ -100,7 +100,7 @@ def notify_about_rentals_and_reservations():
         # reuse notified state for this fetch all rentals that were supposed to come back today and which have been notified about reserved until before the rental hour startet
         rentals_not_received_back = [ r for r in models.Rental.objects.filter(received_back_at__isnull=True, notified__lte=timezone.now(
             ).replace(hour=int(models.Settings.objects.get(type='returning_start_hour').value))) if r.extended_until==timezone.now().date()]
-        if rentals_not_received_back.count() > 0:
+        if len(rentals_not_received_back) > 0:
             message="Wir haben ein paar Gegenstände nicht zurückerhalten, bitte einmal überprüfen."
             send_mail(subject=f"Fehlende Gegenstände für heutige Rückgabe",
                 from_email=settings.DEFAULT_FROM_EMAIL, message=message, html_message=message, recipient_list=[settings.DEFAULT_NOTIFICATION_EMAIL])
