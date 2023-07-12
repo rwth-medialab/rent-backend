@@ -23,6 +23,7 @@ from rest_framework import viewsets, renderers
 from rest_framework import permissions
 from rest_framework.authtoken.serializers import AuthTokenSerializer
 from rest_framework.response import Response
+from rest_framework.exceptions import APIException
 from rest_framework.decorators import api_view, action, authentication_classes, permission_classes
 from rest_framework.views import exception_handler
 
@@ -587,7 +588,6 @@ class ReservationViewSet(viewsets.ModelViewSet):
 class RentalViewSet(viewsets.ModelViewSet):
     queryset = Rental.objects.all()
     serializer_class = RentalSerializer
-    # TODO assign rights
     permission_classes = [customPermissions.RentalPermission]
 
     def get_queryset(self):
@@ -615,22 +615,20 @@ class RentalViewSet(viewsets.ModelViewSet):
         serializer = serializers.RentalSerializer(
             rental, context={'request': request})
         if serializer.data['extendable']:
-            daydiff = (rental.reserved_until-timezone.now().date()).days
+            daydiff = (serializer.data['extended_until']-timezone.now().date()).days
             if (not request.user.is_staff) and (daydiff >= 2 or daydiff < 0):
-                return Response(f"Daydiff = {daydiff}, only 1 and 2 are possible values", status=status.HTTP_400_BAD_REQUEST)
+                raise APIException(f"Daydiff = {daydiff}, only 1 and 2 are possible values", code=status.HTTP_400_BAD_REQUEST)
             elif (daydiff >= 9 or daydiff < 0):
-                return Response(f"Daydiff = {daydiff}, only values between 9 and 1 are possible values", status=status.HTTP_400_BAD_REQUEST)
+                raise APIException(f"Daydiff = {daydiff}, only values between 9 and 1 are possible values", code=status.HTTP_400_BAD_REQUEST)
             else:
-                # maybe replace model through extensive logging 
-                models.Extension.objects.create(extended_by=request.user, extended_from=rental.reserved_until, extended_until=rental.reserved_until+timedelta(weeks=1), extended_rental=rental)
-                rental.reserved_until += timedelta(weeks=1)
+                models.Extension.objects.create(extended_by=request.user, extended_from=rental.extended_until(), extended_until=serializer.data['extended_until']+timedelta(weeks=1), extended_rental=rental)
                 rental.notified = None
                 rental.save()
                 serializer = serializers.RentalSerializer(
                     rental, context={'request': request})
                 return Response(serializer.data)
         else:
-            return Response("nicht erweiterbar", status=status.HTTP_400_BAD_REQUEST)
+            return APIException("nicht verlängerbar", code=status.HTTP_400_BAD_REQUEST)
 
     @ action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
     def bulk_rental_creation(self, request: Request):
@@ -652,7 +650,6 @@ class RentalViewSet(viewsets.ModelViewSet):
                 rental['rental_number'] = rental_number
                 rental['handed_out_at'] = timezone.now()
                 rental['reservation'] = reservation['id']
-                rental['reserved_until'] = reservation['reserved_until']
                 # we need an own serializer since reservation needs to be read only on the other serializer
                 serializer = serializers.RentalCreateSerializer(data=rental)
                 serializer.is_valid(raise_exception=True)
@@ -676,8 +673,7 @@ class RentalViewSet(viewsets.ModelViewSet):
             pk__in=request.data, received_back_at=None)
         if len(queryset) != len(request.data):
             return Response("couldn't find some of those rentals", status=status.HTTP_400_BAD_REQUEST)
-        updated = queryset.update(
-            reserved_until=timezone.now().date(), received_back_at=timezone.now())
+        updated = queryset.update(received_back_at=timezone.now())
         return Response(updated)
 
 

@@ -68,8 +68,8 @@ def notify_about_rentals_and_reservations():
                                     from_email=settings.DEFAULT_FROM_EMAIL, message=message, html_message=message, recipient_list=[settings.DEFAULT_NOTIFICATION_EMAIL])
             reservations.update(notified=timezone.now())
 
-    rentals = models.Rental.objects.filter(reserved_until=(
-        timezone.now() + timedelta(days=2)).date(), notified__isnull=True)
+    rentals = [ r for r in models.Rental.objects.filter( received_back_at__isnull=True, notified__isnull=True) if r.extended_until==(
+        timezone.now() + timedelta(days=2)).date()]
     count_rental_mails = 0
     if len(rentals) > 0:
         with transaction.atomic():
@@ -78,7 +78,7 @@ def notify_about_rentals_and_reservations():
                 rental_dict = model_to_dict(rental)
                 if rental.reservation.reserver.user.pk not in template_data:
                     user = rental.reservation.reserver.user
-                    template_data[user.pk] = {'user': model_to_dict(user), 'rentals': [], 'return_date_info': {'date': rental_dict['reserved_until'], 'start': models.Settings.objects.get(
+                    template_data[user.pk] = {'user': model_to_dict(user), 'rentals': [], 'return_date_info': {'date': rental.extended_until(), 'start': models.Settings.objects.get(
                         type='returning_start_hour').value, 'end': models.Settings.objects.get(type='returning_end_hour').value}}
                 rental_dict['rented_object'] = model_to_dict(
                     rental.rented_object)
@@ -98,8 +98,8 @@ def notify_about_rentals_and_reservations():
     # only execute if returning hours are over
     if timezone.now() > timezone.now().replace(hour=int(models.Settings.objects.get(type='returning_end_hour').value), minute=0, second=0):
         # reuse notified state for this fetch all rentals that were supposed to come back today and which have been notified about reserved until before the rental hour startet
-        rentals_not_received_back = models.Rental.objects.filter(reserved_until=datetime.now().date() ,received_back_at__isnull=True, notified__lte=timezone.now(
-            ).replace(hour=int(models.Settings.objects.get(type='returning_start_hour').value)))
+        rentals_not_received_back = [ r for r in models.Rental.objects.filter(received_back_at__isnull=True, notified__lte=timezone.now(
+            ).replace(hour=int(models.Settings.objects.get(type='returning_start_hour').value))) if r.extended_until==timezone.now().date()]
         if rentals_not_received_back.count() > 0:
             message="Wir haben ein paar Gegenstände nicht zurückerhalten, bitte einmal überprüfen."
             send_mail(subject=f"Fehlende Gegenstände für heutige Rückgabe",

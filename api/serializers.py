@@ -276,6 +276,10 @@ class RentalSerializer(serializers.ModelSerializer):
     reservation = ReservationAdminSerializer(required=False, read_only=True)
     extendable = serializers.SerializerMethodField(
         required=False, read_only=True)
+    extended_until = serializers.SerializerMethodField(
+        required=False, read_only=True)
+    extended_count = serializers.SerializerMethodField(
+        required=False, read_only=True)
 
     class Meta:
         model = Rental
@@ -290,6 +294,15 @@ class RentalSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "reserved until overlaps with a reservation or rental")
         return reserved_until
+    
+    def get_extended_until(self, obj:Rental) -> datetime:
+        """
+        add a field to check until when an item is rented
+        """
+        return obj.extended_until()
+    
+    def get_extended_count(self, obj:Rental) -> int:
+        return obj.extension_set.count()
 
     # default extension time = 1 week
     def get_extendable(self, obj) -> bool:
@@ -297,8 +310,8 @@ class RentalSerializer(serializers.ModelSerializer):
         checking if the object is extendable by 1 week returns true if it is
         """
         # reserved_from + offset should result in the reseved + offset + offset for reparations
-        available = models.RentalObjectType.available(pk=obj.rented_object.type.pk, from_date=obj.reserved_until +
-                                                      settings.DEFAULT_OFFSET_BETWEEN_RENTALS, until_date=obj.reserved_until+timedelta(weeks=1))
+        available = models.RentalObjectType.available(pk=obj.rented_object.type.pk, from_date=self.get_extended_until(obj) +
+                                                      settings.DEFAULT_OFFSET_BETWEEN_RENTALS, until_date=self.get_extended_until(obj)+timedelta(weeks=1))
         return available["available"] >= 1
 
 

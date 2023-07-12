@@ -113,13 +113,13 @@ class RentalObjectType(models.Model):
         reservations = Reservation.objects.filter(
             objecttype_id=pk, reserved_from__lte=until_date.date(), reserved_until__gte=from_date.date()).exclude(rental__in=Rental.objects.filter(rented_object__type=pk)).exclude(canceled__isnull=False)
         rentals = Rental.objects.filter(
-            rented_object__in=objects, handed_out_at__lte=until_date, reserved_until__gte=from_date.date())
-
+            rented_object__in=objects, handed_out_at__lte=until_date)
+        rentals = [r for r in rentals if r.extended_until() <= from_date.date()]
         count = len(objects)
 
         # give reservations + rentals them common keys for the dates
         normalized_list = [{**model_to_dict(x), 'from_date': x.handed_out_at.date(
-        ), 'until_date': x.reservation.reserved_until} for x in rentals]
+        ), 'until_date': x.extended_until()} for x in rentals]
         # normalized_list = [ for x in reservations]
         for reservation in reservations:
             for _ in range(reservation.count):
@@ -250,8 +250,12 @@ class Rental(models.Model):
         null=True, default=None, blank=True)
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
     notified = models.DateTimeField(null=True, blank=True, default=None)
-    # we need the additional field to allow single device rental extensions
-    reserved_until = models.DateField()
+
+    def extended_until(self) -> date:
+        currentend = self.reservation.reserved_until
+        if self.extension_set.count()>0:
+            currentend = self.extension_set.order_by('-extended_until').first().extended_until
+        return currentend     
 
     def __str__(self) -> str:
         return 'Rental: ' + str(self.rental_number)
@@ -260,8 +264,8 @@ class Extension(models.Model):
     """
     model to save extensions more verbose
     """
-    extended_from = models.DateTimeField(default=None, null=False)
-    extended_until = models.DateTimeField(default=None, null=False)
+    extended_from = models.DateField(default=None, null=False)
+    extended_until = models.DateField(default=None, null=False)
     extended_at = models.DateTimeField(default=timezone.now, null=False)
     extended_by = models.ForeignKey(User, on_delete=models.CASCADE)
     extended_rental = models.ForeignKey(Rental, on_delete=models.CASCADE)
