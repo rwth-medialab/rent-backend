@@ -118,10 +118,10 @@ class ReservationPermission(permissions.BasePermission):
         """
         if not request.user.is_authenticated:
             return False
-            
+        print(view.action)
         if view.action in ['retrieve', 'bulk_create', 'cancel_reservation', 'list']:
             return True
-        elif view.action in ['list', 'create', 'download_form']:
+        elif view.action in ['list', 'create', 'download_form', 'currently_selected_objects']:
             return request.user.has_perm('base.lending_access')
         elif view.action in ['destroy', 'update', 'partial_update']:
             return request.user.has_perm('base.inventory_editing')

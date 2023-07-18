@@ -246,7 +246,7 @@ class ReservationProfileSerializer(serializers.ModelSerializer):
 class ReservationSerializer(serializers.ModelSerializer):
     objecttype = RentalObjectTypeSerializer(read_only=True)
     fullfilled = serializers.SerializerMethodField(
-        required=False, read_only=True)
+        required=False, read_only=True) 
 
     class Meta:
         model = models.Reservation
@@ -254,7 +254,7 @@ class ReservationSerializer(serializers.ModelSerializer):
         exclude = ['reserver', 'notified']
 
     def get_fullfilled(self, obj):
-        return obj.rental_set.all().count() > 0
+        return obj.rental_set.filter(handed_out_at__isnull=False).count() > 0
 
 
 class ReservationAdminSerializer(serializers.ModelSerializer):

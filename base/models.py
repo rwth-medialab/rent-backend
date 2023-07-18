@@ -1,3 +1,4 @@
+from typing import Iterable, Optional
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
@@ -237,7 +238,7 @@ class Rental(models.Model):
                 check=models.Q(
                     models.Q(handed_out_at__lte=models.F('received_back_at')) | models.Q(received_back_at__isnull=True)),
                 name="rental_handed_out_lte_received_date"
-            )
+            ),
         ]
     rented_object = models.ForeignKey(RentalObject, on_delete=models.CASCADE)
     lender = models.ForeignKey(User, blank=True, null=True,
@@ -245,11 +246,17 @@ class Rental(models.Model):
     return_processor = models.ForeignKey(User, blank=True, null=True, default=None, on_delete=models.CASCADE,
                                          related_name='return_processor', verbose_name='person who processes the return')
     rental_number = models.BigIntegerField()
-    handed_out_at = models.DateTimeField(default=timezone.now)
+    handed_out_at = models.DateTimeField(null=True, blank=True)
     received_back_at = models.DateTimeField(
         null=True, default=None, blank=True)
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE)
     notified = models.DateTimeField(null=True, blank=True, default=None)
+
+    def save(self, force_insert=False, force_update=False, using=None, update_fields=None) -> None:
+        # check if the inserted rented object is the same type as the type required from the reservation
+        if self.reservation.objecttype.pk != self.rented_object.type.pk:
+            raise ValueError("Reservationtype and type of inserted rented object have to be equal")
+        return super().save(force_insert, force_update, using, update_fields)
 
     def extended_until(self) -> date:
         currentend = self.reservation.reserved_until

@@ -110,7 +110,7 @@ class UserViewSet(viewsets.ModelViewSet):
         if 'username' in request.data and 'email' in request.data:
             usermodel = models.User.objects.filter(username=request.data['username'], email=request.data['email'])
             if usermodel.count()==1:
-                print("Nutzer gefunden Resetlink wird generiert")
+                logger.info("Nutzer gefunden Resetlink wird generiert")
                 usermodel = usermodel[0]
                 hash = hashlib.sha256(
                     (str(timezone.now()) + get_random_string(length=256)).encode("utf-8")).hexdigest()
@@ -120,7 +120,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 send_mail(subject="Passwordreset", message=email_text, html_message=email_text,
                         from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[request.data['email']])
             else:
-                print(f"Es wurden {usermodel.count()} Accounts zu den Daten Email: {request.data['username']} und Nutzername: {request.data['email']} gefunden. Daher kann kein Reset Link gesendet werden")
+                logger.info(f"Es wurden {usermodel.count()} Accounts zu den Daten Email: {request.data['username']} und Nutzername: {request.data['email']} gefunden. Daher kann kein Reset Link gesendet werden")
         return Response(data={'abs':'abs'})
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
@@ -393,12 +393,11 @@ class RentalobjectTypeViewSet(viewsets.ModelViewSet):
             type=pk, rentable=True).exclude(rentalobjectstatus__in=object_status)
         result = []
         for rental_object in queryset:
-            query_res = rental_object.rental_set.filter(
-                received_back_at__isnull=True, handed_out_at__lte=timezone.now())
+            query_res = rental_object.rental_set.filter(Q(
+                Q(received_back_at__isnull=True), Q(Q(handed_out_at__lte=timezone.now())|Q(handed_out_at__isnull=True))))
             if len(query_res) == 0:
                 data = model_to_dict(rental_object)
                 result.append(data)
-
         return Response(result)
 
     @action(detail=True, url_path="available", methods=['GET'], permission_classes=[permissions.IsAuthenticated])
@@ -476,7 +475,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
         if 'open' in getdict:
             if getdict['open'] in ['true', 'True']:
                 # remove all reservations that already got a corresponding rental
-                queryset = queryset.exclude(rental__in=Rental.objects.all())
+                queryset = queryset.exclude(rental__handed_out_at__isnull=False)
         if 'unique' in getdict:
             if getdict['unique'] in ['true', 'True']:
                 queryset = queryset.distinct('operation_number')
@@ -490,6 +489,15 @@ class ReservationViewSet(viewsets.ModelViewSet):
             if getdict['canceled'] in ['false', 'False']:
                 queryset = queryset.filter(canceled__isnull=True)
         return queryset
+    
+    @action(detail=True, url_path="selectedobjects", methods=['GET'])
+    def currently_selected_objects(self, request: Request, pk=None):
+        queryset = models.RentalObject.objects.filter(rental__reservation=pk)
+        result = []
+        for rental_object in queryset:
+            data = model_to_dict(rental_object)
+            result.append(data)
+        return Response(result)
 
     @action(detail=True, methods=['POST'], url_path="cancel", permission_classes=[permissions.IsAuthenticated])
     def cancel_reservation(self, request: Request, pk=None):
@@ -500,6 +508,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
             return Response("already canceled", status=status.HTTP_400_BAD_REQUEST)
         reservation.canceled = timezone.now()
         reservation.save()
+        reservation.rental_set.all().delete()
         serializer = ReservationSerializer(reservation)
         template_data = serializer.data
         template = Template(models.Text.objects.filter(
@@ -567,14 +576,15 @@ class ReservationViewSet(viewsets.ModelViewSet):
     @ action(detail=False, methods=['POST'], url_path="download_form", permission_classes=[permissions.IsAuthenticated])
     def download_form(self, request: Request):
         """
-        expecting data in [{reserver: {'user': {first_name:string, last_name:string, email:string} }, objecttype: {name:string, prefix_identifier:string}, slectedObjects: [pk:int], reserved_from: %Y-%m-%d :string, reserved_until:string }] for each type an instance
+        expecting data in [{id, reserver: {'user': {first_name:string, last_name:string, email:string} }, objecttype: {name:string, prefix_identifier:string}, slectedObjects: [pk:int], reserved_from: %Y-%m-%d :string, reserved_until:string }] for each type an instance
         """
+        logger.info(f"Downloading rental form for reservations: {list(map(lambda x:x['id'], request.data))}")
         context = {'rented_items': [], 'reserver': {}}
         for reservation in request.data:
             context['reserver']['last_name'] = reservation['reserver']['user']['last_name']
             context['reserver']['first_name'] = reservation['reserver']['user']['first_name']
             context['reserver']['email'] = reservation['reserver']['user']['email']
-            context['rented_items'].append({'reserved_from': reservation['reserved_from'], 'reserved_until': reservation['reserved_until'], 'count': reservation['count'], 'name': reservation['objecttype']['name'], 'identifier': ",".join(
+            context['rented_items'].append({'operation_number':reservation['operation_number'],'reserved_from': reservation['reserved_from'], 'reserved_until': reservation['reserved_until'], 'count': reservation['count'], 'name': reservation['objecttype']['name'], 'identifier': ",".join(
                 [reservation['objecttype']['prefix_identifier'] + str(models.RentalObject.objects.get(pk=thing).internal_identifier) for thing in reservation['selectedObjects']])})
         filepath = models.Files.objects.get(name='rental_form').file.path
         doc = DocxTemplate(filepath)
@@ -597,12 +607,14 @@ class RentalViewSet(viewsets.ModelViewSet):
         else:
             queryset = queryset.filter(reservation__reserver=self.request.user.profile)
         if "open" in self.request.GET and self.request.GET["open"] in ["true", "True"]:
-            queryset = queryset.filter(received_back_at__isnull=True)
+            queryset = queryset.filter(received_back_at__isnull=True, handed_out_at__isnull=False)
 
         if "self" in self.request.GET and self.request.GET["self"] in ["true", "True"]:
             # query only own rentals (necessary for users without special rights)
             queryset = queryset.filter(
-                reservation__reserver=self.request.user.profile)
+                reservation__reserver=self.request.user.profile, handed_out_at__isnull=False)
+        if "reservation" in self.request.GET:
+            queryset = queryset.filter(reservation=int(self.request.GET["reservation"]))
         return queryset
 
     @ action(detail=True, methods=['POST'], url_path="extend", permission_classes=[permissions.IsAuthenticated])
@@ -633,13 +645,27 @@ class RentalViewSet(viewsets.ModelViewSet):
     @ action(detail=False, methods=['POST'], url_path="bulk", permission_classes=[permissions.IsAuthenticated])
     def bulk_rental_creation(self, request: Request):
         """
-        Takes a list of reservations and turns them into rentals
+        Takes a list of reservations with a list of slectedObjects each to create collected rentals to be handed out
         """
         if models.Rental.objects.all().exists():
             rental_number = models.Rental.objects.aggregate(
                 Max('rental_number'))['rental_number__max']+1
         else:
             rental_number = 1
+        for reservation in request.data:
+            logger.info(reservation)
+            reservation_model = models.Reservation.objects.get(pk=reservation['id'])
+            # remove all Rentals that are on this rental 
+            reservation_model.rental_set.exclude(rented_object__in=reservation['selectedObjects']).delete()
+            already_saved_rental_objects = reservation_model.rental_set
+            for selected in reservation['selectedObjects']:
+                if already_saved_rental_objects.filter(rented_object__pk=selected):
+                    continue
+                rental_object = models.RentalObject.objects.get(pk=selected)
+                models.Rental.objects.create(reservation=reservation_model,rented_object=rental_object, rental_number=rental_number)
+        reservation_model.refresh_from_db()
+        serializer = serializers.ReservationSerializer(reservation_model)
+        return Response(serializer.data)
         template_data = []
         ret_data = []
         for reservation in request.data:
@@ -662,6 +688,19 @@ class RentalViewSet(viewsets.ModelViewSet):
         send_mail(subject="Dein Ausleihvorgang", message=message, html_message=message,
                   from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[template_data[0]['reservation'].reserver.user.email])
         return Response(ret_data)
+    @ action(detail=False, methods=['POST'], url_path="bulkhandout", permission_classes=[permissions.IsAuthenticated])
+    def bulk_rental_handout(self, request: Request):
+        """
+        checks if all rentals are correct for a list of reservationIDs and commits them
+        """
+        with transaction.atomic():
+            for reservation in models.Reservation.objects.filter(pk__in=request.data["reservations"]):
+                rental_set = reservation.rental_set
+                if rental_set.all().count() != reservation.count:
+                    raise ValueError("The number of rented objects is unequal to the number of reserved objects")
+                rental_set.all().update(handed_out_at= timezone.now())
+                #TODO send email on handout
+        return Response()
 
     @ action(detail=False, methods=['POST'], url_path="return", permission_classes=[permissions.IsAuthenticated])
     def bulk_return(self, request: Request):
